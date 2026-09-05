@@ -51,6 +51,9 @@ test('注册名、香港分组和频道范围固定，未引入回看或点播',
     assert.equal(row.catchup, 'none')
     assert.equal(row.wantsPlayback, undefined)
     assert.equal(row.url, undefined)
+    // issue #118：台标写死的 c1.fengshows-cdn.com 已握不上 HTTPS（大陆/香港/美国探针均 alert 40），
+    // 官网同路径改挂 q1.fengshows.com；这里锁定主机名，防止回退到旧域名或退回明文 http。
+    assert.match(row.logo, /^https:\/\/q1\.fengshows\.com\/a\/\d{4}_\d{2}\/[0-9a-f]+\.png$/)
   }
   for (const bad of ['fengshows-movie.flv','fengshows-info.flv/extra','fengshows-info.flv?token=x','fengshows-info.m3u8']) assert.equal(module.claimsRef(bad), false)
   assert.equal(CHANNELS.length, 3)

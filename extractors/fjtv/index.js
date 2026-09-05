@@ -1,11 +1,14 @@
-/** 福建官方直播：海博省市频道 + 不依赖海博的福州、厦门广电线路。 */
+/** 福建官方直播：省级动态签名 + 海博地市频道 + 福州、厦门独立线路。 */
 import {
+  buildProvinceGroup,
   buildChannelGroups,
+  clearProvinceCache,
   clearXiamenCache,
   EXPECTED_GROUPS,
   fetchChannelGroups,
   fetchFuzhouChannels,
   fetchXiamenChannels,
+  resolveProvinceChannel,
   resolveXiamenChannel,
 } from './api.js'
 
@@ -73,19 +76,19 @@ function validateHaiboGroups(rows, groups) {
 export default {
   id: 'fjtv',
   name: '福建',
-  description: '福建省级频道与重点城市官方直播；福州、厦门线路独立于海博接口，自动探测后并入现有福建分组。',
+  description: '福建省级频道播放时自动续签；地市、福州和厦门官方线路独立抓取并合入现有福建分组。',
   capabilities: { cache: 'disk', resolve: true, epg: false },
   outputGroupName: '福建',
   defaultRefreshMinutes: 360,
   refreshConfigurable: false,
-  refreshDescription: '自动管理：每 360 分钟刷新海博频道表及福州、厦门官方 HLS；单个平台失败时保留其它平台的可用频道。',
+  refreshDescription: '自动管理：省级六路在播放时刷新短效地址；每 360 分钟刷新地市频道表及福州、厦门官方 HLS。',
 
   configSchema: [],
 
   async fetch(_config, ctx = {}) {
     const options = { timeoutMs: ctx.timeoutMs, fetchImpl: ctx.fetchImpl }
     const warnings = []
-    let groups = []
+    let groups = [buildProvinceGroup()]
     let haiboError = null
     let fuzhouError = null
     let xiamenError = null
@@ -94,10 +97,11 @@ export default {
       const rows = await fetchChannelGroups(options)
       groups = buildChannelGroups(rows)
       validateHaiboGroups(rows, groups)
+      groups.unshift(buildProvinceGroup())
     } catch (error) {
       haiboError = error
-      warnings.push(`海博TV本轮不可用：${error?.message || error}`)
-      groups = []
+      warnings.push(`海博TV地市频道本轮不可用：${error?.message || error}`)
+      groups = [buildProvinceGroup()]
     }
 
     try {
@@ -126,7 +130,14 @@ export default {
     return { groups, meta: { skipped: [], warnings } }
   },
 
-  claimsRef: ref => /^fjtv-xiamen-(?:16|17|18)$/.test(String(ref || '')),
-  resolve: resolveXiamenChannel,
-  clearResolveCache: clearXiamenCache,
+  claimsRef: ref => /^fjtv-(?:province-\d{18}|xiamen-(?:16|17|18))$/.test(String(ref || '')),
+  resolve(ref, ctx) {
+    return String(ref || '').startsWith('fjtv-province-')
+      ? resolveProvinceChannel(ref, ctx)
+      : resolveXiamenChannel(ref, ctx)
+  },
+  clearResolveCache() {
+    clearProvinceCache()
+    clearXiamenCache()
+  },
 }

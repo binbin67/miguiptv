@@ -1,7 +1,9 @@
-/** 福建海博TV频道接口，以及福州、厦门广电官网的独立直播线路。 */
+/** 福建省级短效接口、海博地市频道，以及福州、厦门广电独立直播线路。 */
+import { createHash } from 'node:crypto'
 import fetch from 'node-fetch'
 
 export const CHANNEL_LIST_URL = 'https://mapi-plus.fjtv.net/api/open/haibo8/tv_channel_list.php'
+export const PROVINCE_CHANNEL_URL = 'https://live.fjtv.net/m2o/channel/channel_info.php'
 export const XIAMEN_CHANNEL_URL = 'https://mapi1.kxm.xmtv.cn/api/v1/channel.php'
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
@@ -9,10 +11,20 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
 
 const FUZHOU_REFERER = 'https://www.zohi.tv/'
 const XIAMEN_REFERER = 'https://www.xmtv.cn/'
+const PROVINCE_EXPIRY_GUARD_MS = 60 * 1000
 const XIAMEN_EXPIRY_GUARD_MS = 60 * 1000
+const nativeFetch = globalThis.fetch.bind(globalThis)
 
+const provinceStreamCache = new Map()
+const provincePending = new Map()
 const xiamenStreamCache = new Map()
 const xiamenPending = new Map()
+
+// 官网 m2obase.js 会把这些签名参数下发给每个浏览器，并非用户凭据。
+const PROVINCE_API_KEY = '877a9ba7a98f75b90a9d49f53f15a858'
+const PROVINCE_API_SECRET = '68a04b8177bdc9e5e16a89e6777a7b66'
+const PROVINCE_API_VERSION = '1.0.0'
+const PROVINCE_MEDIA_HOSTS = new Set(['live1-fuyun.fjtv.net', 'live2-fuyun.fjtv.net'])
 
 // 福视悦动官网播放器公开的三路固定 HLS。它们不经过海博 API，因而海博被
 // 讯飞 WAF 拦截时仍可独立工作。只接受这张固定表，避免把活动直播混进频道组。
@@ -33,21 +45,28 @@ export const XIAMEN_CHANNELS = Object.freeze([
 
 const XIAMEN_BY_ID = new Map(XIAMEN_CHANNELS.map(channel => [channel.id, channel]))
 
-// sortId 来自海博TV 9.0.3「看电视」频道分类接口。ID + 原始名称双重校验，
-// 防止接口混入活动直播，或后台复用频道 ID 后把其它内容静默写进播放列表。
+// 省级六路来自官网直播页的固定频道 ID；播放地址在用户打开频道时按官网
+// m2o 签名接口获取，不再依赖海博频道表里可能过期或串台的 streams[].hls。
+export const PROVINCE_CHANNELS = Object.freeze([
+  Object.freeze({ id: '665248990102917120', rawName: '综合频道', name: '福建综合', path: 'zhpd/hd',
+    logo: 'https://fyfile.fjtv.net/file/storage1-cloudlivemanage/cloudlivemanage/2024/468/3363c3e049251201.png' }),
+  Object.freeze({ id: '665248966136664064', rawName: '东南卫视', name: '东南卫视', path: 'dnpd/hd',
+    logo: 'https://fyfile.fjtv.net/file/storage1-cloudlivemanage/cloudlivemanage/2024/468/5c0e71b56c10085b.png' }),
+  Object.freeze({ id: '665248914378952704', rawName: '新闻频道', name: '福建新闻', path: 'xwpd/hd',
+    logo: 'https://fyfile.fjtv.net/file/storage1-cloudlivemanage/cloudlivemanage/2024/468/a8ba93a63f73bd96.png' }),
+  Object.freeze({ id: '665248752898248704', rawName: '文旅·体育频道', name: '福建文旅体育', path: 'dspd/hd',
+    logo: 'https://fyfile.fjtv.net/file/storage1-cloudlivemanage/cloudlivemanage/2026/468/a506ae5283b09312.png' }),
+  Object.freeze({ id: '665248553475870720', rawName: '少儿频道', name: '福建少儿', path: 'child/hd',
+    logo: 'https://fyfile.fjtv.net/file/storage1-cloudlivemanage/cloudlivemanage/2024/468/e04ccb9cd4982251.png' }),
+  Object.freeze({ id: '665248523855695872', rawName: '海峡卫视', name: '海峡卫视', path: 'haixiapd/hd',
+    logo: 'https://fyfile.fjtv.net/file/storage1-cloudlivemanage/cloudlivemanage/2024/468/15411d7dabac026f.png' }),
+])
+
+const PROVINCE_BY_ID = new Map(PROVINCE_CHANNELS.map(channel => [channel.id, channel]))
+
+// sortId 来自海博TV 9.0.3「看电视」频道分类接口。海博现在只负责地市台；
+// ID + 原始名称双重校验，避免活动直播或后台复用 ID 混入正式频道。
 const GROUPS = [
-  {
-    sortId: '665226484478443521',
-    name: '福建电视台',
-    channels: [
-      { id: '665248990102917120', rawName: '综合频道', name: '福建综合' },
-      { id: '665248966136664064', rawName: '东南卫视', name: '东南卫视' },
-      { id: '665248914378952704', rawName: '新闻频道', name: '福建新闻' },
-      { id: '665248752898248704', rawName: '文旅·体育频道', name: '福建文旅体育' },
-      { id: '665248553475870720', rawName: '少儿频道', name: '福建少儿' },
-      { id: '665248523855695872', rawName: '海峡卫视', name: '海峡卫视' },
-    ],
-  },
   {
     sortId: '665226484646215680',
     name: '福建地市台',
@@ -104,7 +123,21 @@ function logoOf(row) {
   return validOfficialUrl(row?.index_pic?.file_url || row?.indexpic)
 }
 
-/** 按固定频道顺序构建两个分组；未知行、错名行与非官方 HLS 全部忽略。 */
+/** 省级频道表随模块版本维护；短效播放地址留到实际播放时解析。 */
+export function buildProvinceGroup() {
+  return {
+    name: '福建电视台',
+    dataList: PROVINCE_CHANNELS.map(channel => ({
+      name: channel.name,
+      deferredRef: `fjtv-province-${channel.id}`,
+      // 清单由本机刷新并改写为绝对分片地址，视频分片仍由播放器直连官方 CDN。
+      relayHls: true,
+      logo: channel.logo,
+    })),
+  }
+}
+
+/** 按固定频道顺序构建海博地市分组；未知行、错名行与非官方 HLS 全部忽略。 */
 export function buildChannelGroups(groupRows) {
   const rowsBySort = new Map(
     (Array.isArray(groupRows) ? groupRows : []).map(item => [String(item?.sortId || ''), item?.rows]),
@@ -161,11 +194,131 @@ async function requestGroup(sortId, { timeoutMs = 10000, fetchImpl = fetch } = {
   }
 }
 
-/** 两个分类必须同时成功，避免一次局部接口抖动把另一半缓存覆盖掉。 */
+/** 海博接口只取地市分类；省级六路由固定频道表和播放时签名接口提供。 */
 export async function fetchChannelGroups(options = {}) {
   const result = []
   for (const group of GROUPS) result.push(await requestGroup(group.sortId, options))
   return result
+}
+
+function provinceHeaders(now = Date.now()) {
+  const timestamp = String(Math.floor(Number(now) / 1000))
+  const signature = createHash('md5')
+    .update([PROVINCE_API_KEY, PROVINCE_API_SECRET, PROVINCE_API_VERSION, timestamp].join('&'))
+    .digest('hex')
+  return {
+    // 福建 CDN 会校验 UA 与 TLS 指纹；内置 undici fetch 配合 Node UA 可通过。
+    'User-Agent': 'node',
+    'X-API-TIMESTAMP': timestamp,
+    'X-API-KEY': PROVINCE_API_KEY,
+    'X-AUTH-TYPE': 'md5',
+    'X-API-VERSION': PROVINCE_API_VERSION,
+    'X-API-SIGNATURE': signature,
+    Accept: 'application/json, text/plain, */*',
+  }
+}
+
+function validProvinceStream(raw, definition) {
+  try {
+    const url = new URL(String(raw || '').trim())
+    if (url.protocol !== 'https:' || !PROVINCE_MEDIA_HOSTS.has(url.hostname)) return null
+    if (url.pathname !== `/${definition.path}/live.m3u8`) return null
+    const token = url.searchParams.get('_upt') || ''
+    const match = /([0-9]{10})$/.exec(token)
+    if (!/^[0-9a-f]{8}[0-9]{10}$/i.test(token) || !match) return null
+    return { url: url.href, expiresAt: Number(match[1]) * 1000 }
+  } catch {
+    return null
+  }
+}
+
+async function requestProvinceChannel(definition, { timeoutMs = 10000, fetchImpl = fetch, now = Date.now() } = {}) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const requestFetch = fetchImpl === fetch ? nativeFetch : fetchImpl
+  const url = new URL(PROVINCE_CHANNEL_URL)
+  url.searchParams.set('channel_id', definition.id)
+  try {
+    const response = await requestFetch(url.href, {
+      headers: provinceHeaders(now),
+      signal: controller.signal,
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const payload = await response.json()
+    const row = Array.isArray(payload) ? payload[0] : null
+    if (!row || String(row.id) !== definition.id || String(row.name || '').trim() !== definition.rawName) {
+      throw new Error('频道身份与官方白名单不一致')
+    }
+    const streams = Array.isArray(row.channel_stream) ? row.channel_stream : []
+    const candidates = [
+      ...streams.filter(stream => Number(stream?.is_main) === 1).map(stream => stream?.m3u8 || stream?.url),
+      ...streams.map(stream => stream?.m3u8 || stream?.url),
+      row.m3u8,
+    ]
+    const stream = candidates.map(raw => validProvinceStream(raw, definition)).find(Boolean)
+    if (!stream) throw new Error('没有找到官方短效 HLS')
+    if (stream.expiresAt <= Number(now) + PROVINCE_EXPIRY_GUARD_MS) {
+      throw new Error('官方返回的短效 HLS 已接近过期')
+    }
+    return stream
+  } catch (error) {
+    const reason = error?.name === 'AbortError' ? `超时 ${timeoutMs}ms` : (error?.message || String(error))
+    throw new Error(`${definition.name}接口请求失败：${reason}`)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function cachedProvinceStream(channelId, options = {}) {
+  const definition = PROVINCE_BY_ID.get(String(channelId || ''))
+  if (!definition) throw new Error('福建省级频道 ID 无效')
+  const now = Number(options.now ?? Date.now())
+  const cached = provinceStreamCache.get(definition.id)
+  if (cached && cached.expiresAt > now + PROVINCE_EXPIRY_GUARD_MS) return cached
+
+  let pending = provincePending.get(definition.id)
+  if (!pending) {
+    pending = requestProvinceChannel(definition, options)
+      .then(stream => {
+        provinceStreamCache.set(definition.id, stream)
+        return stream
+      })
+      .finally(() => {
+        if (provincePending.get(definition.id) === pending) provincePending.delete(definition.id)
+      })
+    provincePending.set(definition.id, pending)
+  }
+  try {
+    return await pending
+  } catch (error) {
+    if (cached && cached.expiresAt > now) return cached
+    throw error
+  }
+}
+
+export async function resolveProvinceChannel(ref, ctx = {}) {
+  try {
+    const match = /^fjtv-province-(\d{18})$/.exec(String(ref || ''))
+    if (!match || !PROVINCE_BY_ID.has(match[1])) return { url: '', desc: '福建省级频道引用格式错误' }
+    const stream = await cachedProvinceStream(match[1], {
+      timeoutMs: ctx.timeoutMs,
+      fetchImpl: ctx.fetchImpl,
+      now: ctx.now,
+    })
+    return {
+      url: stream.url,
+      desc: `${PROVINCE_BY_ID.get(match[1]).name}官方短效地址获取成功`,
+      // 兼容升级前收藏的无 /relay/ 地址，也强制进入清单中继以持续续签。
+      relayHls: true,
+    }
+  } catch (error) {
+    return { url: '', desc: `福建省级频道链接请求失败：${error?.message || String(error)}` }
+  }
+}
+
+export function clearProvinceCache() {
+  provinceStreamCache.clear()
+  provincePending.clear()
 }
 
 function isExpectedFuzhouUrl(raw) {

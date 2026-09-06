@@ -16,6 +16,9 @@
  *                                 (`xt:<id>`) 并最终写进 EXTINF 的属性值里
  *   name                  string  后台显示名
  *   description           string  后台一句话说明
+ *   category              string  可选；后台源管理分组。'account' 表示带账号/
+ *                                 授权能力，'live' 表示网络直播平台；不声明即
+ *                                 'standard'（免账号的普通官方抓取模块）
  *   capabilities          object  { cache: 'disk'|'memory'|'none',
  *                                   resolve: boolean, epg: boolean }
  *   defaultRefreshMinutes number  默认刷新间隔
@@ -89,6 +92,7 @@ import bilibiliLive from './bilibili-live/index.js'
 import asianLive from './asian-live/index.js'
 import beidou from './beidou/index.js'
 import beijing from './beijing/index.js'
+import chongqing from './chongqing/index.js'
 import cztv from './cztv/index.js'
 import dalian from './dalian/index.js'
 import douyuLive from './douyu-live/index.js'
@@ -117,6 +121,7 @@ import yangshipin from './yangshipin/index.js'
 // 模块 id 会进 sourceId 并写进 EXTINF 属性值，不消毒就是注入面。
 // 与 utils/configBackupAPI.js 的文件名白名单同款约束。
 export const MODULE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/
+export const MODULE_CATEGORIES = new Set(['account', 'live', 'standard'])
 
 const MODULES = [
   // 顺序即后台展示顺序，也是 channelMerger 的合并顺序（先到的分组优先保留）
@@ -129,6 +134,7 @@ const MODULES = [
   douyuLive,
   beidou,
   beijing,
+  chongqing,
   dalian,
   gdtv,
   gztv,
@@ -160,6 +166,9 @@ export function validateModule(module) {
   }
   if (typeof module.fetch !== 'function') {
     throw new Error(`抓取模块 ${module.id} 没有实现 fetch()`)
+  }
+  if (module.category != null && !MODULE_CATEGORIES.has(module.category)) {
+    throw new Error(`抓取模块 ${module.id} 的 category 非法: ${JSON.stringify(module.category)}`)
   }
   if (module.capabilities?.resolve && typeof module.resolve !== 'function') {
     throw new Error(`抓取模块 ${module.id} 声明了 resolve 能力但没实现 resolve()`)

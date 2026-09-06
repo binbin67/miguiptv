@@ -167,6 +167,7 @@ export default {
   id: 'migu',
   name: '咪咕视频',
   description: '央视 / 卫视 / 体育等 300+ 频道，含体育赛事与节目单。',
+  category: 'account',
 
   // 归属标识保持字面量 'migu'，不用注册表默认的 'xt:migu'（见文件头约束 2）
   sourceId: 'migu',

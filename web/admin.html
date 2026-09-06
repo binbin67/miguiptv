@@ -513,6 +513,43 @@
             align-items: stretch;
         }
 
+        /* 抓取模块按使用门槛分区。分类标题与卡片网格分层，模块再多也能先扫标题、
+           再在小范围内找卡片；不用改变注册表顺序和实际的合并优先级。 */
+        .source-category-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .source-category-head {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 9px;
+        }
+
+        .source-category-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .source-category-count {
+            padding: 1px 7px;
+            border-radius: 10px;
+            background: #f0f0f0;
+            color: #666;
+            font-size: 11px;
+        }
+
+        .source-category-desc {
+            flex-basis: 100%;
+            color: #999;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
         /* 卡片必须能收缩到内容以下，否则长源名会顶穿轨道。
            grid/flex 子项默认 min-width:auto = 不小于 min-content，而卡片标题是
            white-space:nowrap —— 于是 ellipsis 永远轮不到生效，轨道先被撑大，
@@ -850,6 +887,24 @@
             background: #f9f0ff;
             color: #722ed1;
             border-color: #d3adf7;
+        }
+
+        .source-badge.account {
+            background: #fff7e6;
+            color: #ad4e00;
+            border-color: #ffd591;
+        }
+
+        .source-badge.live {
+            background: #e6f4ff;
+            color: #0958d9;
+            border-color: #91caff;
+        }
+
+        .source-badge.standard {
+            background: #f6ffed;
+            color: #389e0d;
+            border-color: #b7eb8f;
         }
 
         /* 自定义源的展开详情区。280px 那一栏是使用说明。 */
@@ -2668,7 +2723,7 @@
                     </div>
 
                     <div id="extractorNotice"></div>
-                    <div class="source-grid" id="extractorList"></div>
+                    <div class="source-category-list" id="extractorList"></div>
                 </div>
                 </div>
 
@@ -3460,7 +3515,28 @@
                 selectedExtractorId = null;
             }
 
-            box.innerHTML = modules.map(m => {
+            const categories = [
+                {
+                    id: 'account',
+                    title: '🔐 账号与授权',
+                    badge: '账号相关',
+                    description: '部分频道或更高画质需要登录；未配置账号时，仍按各模块说明提供游客或公开内容。',
+                },
+                {
+                    id: 'live',
+                    title: '🎮 网络直播平台',
+                    badge: '网络直播',
+                    description: '抓取直播间或平台热门内容，播放地址通常为短效链接。',
+                },
+                {
+                    id: 'standard',
+                    title: '📺 免账号模块',
+                    badge: '免账号',
+                    description: '无需填写账号凭据，启用后即可自动抓取官方公开频道。',
+                },
+            ];
+
+            const moduleCardHtml = (m, category) => {
                 const h = m.health || {};
                 const when = h.lastSuccessAt ? new Date(h.lastSuccessAt).toLocaleString() : '从未';
                 const hasEditableConfig = extractorHasEditableConfig(m);
@@ -3469,6 +3545,7 @@
                      onclick="selectExtractorModule('${escapeHtml(m.id)}')">
                     <div class="source-card-title">
                         <span class="name">${escapeHtml(m.name)}</span>
+                        <span class="source-badge ${escapeHtml(category.id)}">${escapeHtml(category.badge)}</span>
                         <label class="source-card-toggle" onclick="event.stopPropagation()" title="即时生效，无需保存">
                             <input type="checkbox" ${m.enabled ? 'checked' : ''}
                                    onchange="toggleExtractorModule('${escapeHtml(m.id)}', this.checked)">
@@ -3481,6 +3558,21 @@
                         <span class="card-open-hint">${hasEditableConfig ? '⚙️ 配置 ›' : '详情 ›'}</span>
                     </div>
                 </div>`;
+            };
+
+            box.innerHTML = categories.map(category => {
+                const categoryModules = modules.filter(m => (m.category || 'standard') === category.id);
+                if (!categoryModules.length) return '';
+                return `<section class="source-category" aria-labelledby="extractor-category-${escapeHtml(category.id)}">
+                    <div class="source-category-head">
+                        <div class="source-category-title" id="extractor-category-${escapeHtml(category.id)}">${escapeHtml(category.title)}</div>
+                        <span class="source-category-count">${categoryModules.length} 个</span>
+                        <div class="source-category-desc">${escapeHtml(category.description)}</div>
+                    </div>
+                    <div class="source-grid">
+                        ${categoryModules.map(m => moduleCardHtml(m, category)).join('')}
+                    </div>
+                </section>`;
             }).join('');
 
             renderExtractorDetail();

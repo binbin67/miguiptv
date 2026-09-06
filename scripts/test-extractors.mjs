@@ -623,7 +623,7 @@ check('深圳广电模块已注册，固定周期刷新且逐路径签名流必�
 
 check('省市广电模块卡片只显示地区名，不带平台品牌', () => {
   const expectedNames = {
-    beidou: '辽宁', cztv: '浙江', dalian: '大连', fjtv: '福建', gdtv: '广东', gxtv: '广西',
+    beidou: '辽宁', chongqing: '重庆', cztv: '浙江', dalian: '大连', fjtv: '福建', gdtv: '广东', gxtv: '广西',
     gztv: '广州', hbtv: '湖北', hebtv: '河北', hnntv: '海南', hntv: '河南',
     iqilu: '山东', jstv: '江苏', kankanews: '上海', mgtv: '湖南', njtv: '南京',
     qtv: '青岛', sztv: '深圳',
@@ -767,6 +767,17 @@ try {
     assert.equal(migu.helperSection, '', '没声明 helperSection 的渲染在表单最上面（咪咕就是）')
     assert.equal(bili.helper, 'bilibili-login', 'B 站的扫码登录助手')
     assert.equal(bili.helperSection, '登录态（选填）', '助手要挂在它自己那一段，不是表单最上面')
+  })
+
+  check('模块分类透传给后台，未声明的模块默认归入免账号分类', () => {
+    const modules = newManager().getState().modules
+    for (const id of ['migu', 'beijing', 'fengshows']) {
+      assert.equal(modules.find(module => module.id === id)?.category, 'account', `${id} 应归入账号与授权`)
+    }
+    for (const id of ['bilibili-live', 'huya-live', 'douyu-live']) {
+      assert.equal(modules.find(module => module.id === id)?.category, 'live', `${id} 应归入网络直播平台`)
+    }
+    assert.equal(modules.find(module => module.id === 'yangshipin')?.category, 'standard', '央视频公开频道免登录')
   })
 
   check('★ 所有非代理抓取模块首次出现默认开启，显式关闭后保持关闭', () => {

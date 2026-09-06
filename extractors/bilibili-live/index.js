@@ -141,6 +141,7 @@ export default {
   id: 'bilibili-live',
   name: '哔哩哔哩直播',
   description: '把 B 站直播间变成频道。地址带防盗链，靠 #EXTVLCOPT 传请求头才能播。',
+  category: 'live',
 
   // 直链模块：结果小（一个房间一条），可以落盘缓存，失败时用它兜底。
   capabilities: { cache: 'disk', resolve: false, epg: false },

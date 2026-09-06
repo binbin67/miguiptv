@@ -613,6 +613,8 @@ class ExtractorManager {
         id: module.id,
         name: module.name,
         description: module.description || '',
+        // 源管理据此分区；老模块不声明时归入免账号的普通模块。
+        category: module.category || 'standard',
         // 后台据此在卡片里多渲染一块辅助 UI（具体 markup 在 admin.html）
         helper: module.helper || '',
         // 助手挂在哪一段（不声明就渲染在表单最上面，咪咕就是这样）

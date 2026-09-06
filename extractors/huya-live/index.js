@@ -57,6 +57,7 @@ export default {
   id: 'huya-live',
   name: '虎牙直播',
   description: '按分类加入虎牙热门直播间，也可手动指定房间；播放时即时生成短期有效地址。',
+  category: 'live',
   capabilities: { cache: 'disk', resolve: true, epg: false },
   defaultRefreshMinutes: 30,
   minRefreshMinutes: 15,

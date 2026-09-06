@@ -4,6 +4,7 @@ export default {
   id: 'fengshows',
   name: '凤凰卫视',
   description: '凤凰资讯、凤凰中文、凤凰香港三路官方直播，统一归入香港。游客 480p；登录普通凤凰秀账号可获取 720p，无需付费会员。',
+  category: 'account',
   capabilities: { cache: 'disk', resolve: true, epg: false, catchup: false },
   streamType: 'flv',
   outputGroupName: '香港',

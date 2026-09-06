@@ -115,20 +115,28 @@ check('CRLF/BOM 上游清单归一化：改写后无 \\r 残留、分片相对�
 })
 
 // ---------- 2. 订阅输出 ----------
-check('?relay=2 订阅频道地址输出 /proxy/<pid>.m3u8（relay=1 仍是 /relay/）', () => {
+check('?relay=2 输出全代理，并只升级明确兼容的命名空间 relay 频道', () => {
   writeFileSync(join(DATA_DIR, 'interface.txt'), [
     '#EXTM3U x-tvg-url="${replace}/playback.xml"',
     '#EXTINF:-1 tvg-id="CCTV1综合" group-title="央视",CCTV1综合',
     '${replace}/608807420',
+    '#EXTINF:-1 tvg-id="甘肃卫视" group-title="甘肃",甘肃卫视',
+    '${replace}/relay/gansu-1.m3u8',
+    '#EXTINF:-1 tvg-id="CCTV1" group-title="央视频",CCTV1',
+    '${replace}/relay/ysp-cctv1.m3u8',
     '',
   ].join('\n'))
   const headers = { host: '192.168.3.37:1905' }
   const proxied = interfaceStr('/interface.m3u', headers, '', '', '', '', '2').content.toString()
   assert.ok(proxied.includes('http://192.168.3.37:1905/proxy/608807420.m3u8'), proxied)
+  assert.ok(proxied.includes('http://192.168.3.37:1905/proxy/gansu-1.m3u8'), proxied)
+  assert.ok(proxied.includes('http://192.168.3.37:1905/relay/ysp-cctv1.m3u8'), proxied)
   const relayed = interfaceStr('/interface.m3u', headers, '', '', '', '', '1').content.toString()
   assert.ok(relayed.includes('http://192.168.3.37:1905/relay/608807420.m3u8'), relayed)
+  assert.ok(relayed.includes('http://192.168.3.37:1905/relay/gansu-1.m3u8'), relayed)
   const plain = interfaceStr('/interface.m3u', headers, '', '', '', '', '').content.toString()
   assert.ok(plain.includes('http://192.168.3.37:1905/608807420') && !plain.includes('/proxy/'), plain)
+  assert.ok(plain.includes('http://192.168.3.37:1905/relay/gansu-1.m3u8'), plain)
 })
 
 check('模块可直接写入命名空间全代理地址，replace 后保持单段安全 ref', () => {

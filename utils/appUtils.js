@@ -251,6 +251,16 @@ function interfaceStr(url, headers, urlUserId, urlToken, profile, accessPrefix, 
     // 带 .m3u8 后缀：极影视等播放器按 URL 后缀识别流格式，无后缀会被判定不可播（issue #98 追踪）
     const seg = String(relay) === '2' ? 'proxy' : 'relay'
     result.content = `${result.content}`.replace(/\$\{replace\}\/(\d+)/g, '${replace}/' + seg + '/$1.m3u8')
+    if (String(relay) === '2') {
+      // 命名空间模块通常已经把地址写成 /relay/<ref>.m3u8。只有模块明确确认
+      // 服务端也能拉取其分片时才升级，避免破坏央视频等拒绝服务端分片的 CDN。
+      result.content = `${result.content}`.replace(
+        /\$\{replace\}\/relay\/([a-z0-9][a-z0-9_-]{0,63})\.m3u8/gi,
+        (whole, ref) => resolverFor(ref)?.relayProxyCompatible === true
+          ? `\${replace}/proxy/${ref}.m3u8`
+          : whole,
+      )
+    }
   }
 
   // 剥离内部属性 source-ids（issue #29/#68 源归属标记）后再输出给播放器：

@@ -358,6 +358,13 @@ check('频道表缓存版本只接受正整数，避免每次启动都误判过�
   validateModule({ ...base, catalogVersion: 2 })
 })
 
+check('relay 全代理兼容声明只接受布尔值', () => {
+  const base = { id: 'probe', name: 'probe', fetch: async () => ({ groups: [] }) }
+  assert.throws(() => validateModule({ ...base, relayProxyCompatible: 'yes' }), /必须是布尔值/)
+  validateModule({ ...base, relayProxyCompatible: true })
+  validateModule({ ...base, relayProxyCompatible: false })
+})
+
 check('normalizeGroups 挡住畸形返回，不让一个坏模块搞崩整轮合并', () => {
   assert.deepEqual(normalizeGroups(null), [])
   assert.deepEqual(normalizeGroups('nope'), [])
@@ -637,7 +644,7 @@ check('深圳广电模块已注册，固定周期刷新且逐路径签名流必�
 
 check('省市广电模块卡片只显示地区名，不带平台品牌', () => {
   const expectedNames = {
-    beidou: '辽宁', chongqing: '重庆', sichuan: '四川', cztv: '浙江', dalian: '大连', fjtv: '福建', gdtv: '广东', gxtv: '广西',
+    beidou: '辽宁', chongqing: '重庆', sichuan: '四川', cztv: '浙江', dalian: '大连', fjtv: '福建', gansu: '甘肃', gdtv: '广东', gxtv: '广西',
     gztv: '广州', hbtv: '湖北', hebtv: '河北', hnntv: '海南', hntv: '河南',
     iqilu: '山东', jstv: '江苏', jxntv: '江西', kankanews: '上海', mgtv: '湖南', njtv: '南京',
     qtv: '青岛', sztv: '深圳',

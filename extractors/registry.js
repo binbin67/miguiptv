@@ -32,6 +32,8 @@
  *   preserveGroupSuffixes array   可选；命中这些后缀的特殊分组不被 outputGroupName 覆盖
  *   channelHlsMode        string  可选；'proxy' 或 'relay'，在输出时覆盖频道缓存中的
  *                                 HLS 路由标记，适合整个平台统一要求代理的模块
+ *   relayProxyCompatible boolean 可选；true 表示模块的 relay 频道可被 `?relay=2`
+ *                                 安全升级为全代理；默认不升级，避免破坏拒绝服务端分片的 CDN
  *   streamType            string  可选；默认 hls，flv 由本机流式代理且不转码。
  *                                 FLV resolve 须返回 validateMediaUrl 校验官方调度跳转。
  *   capabilities.catchup boolean 可选；false 表示纯直播，不透传回看查询参数。
@@ -109,6 +111,7 @@ import dalian from './dalian/index.js'
 import douyuLive from './douyu-live/index.js'
 import fjtv from './fjtv/index.js'
 import fengshows from './fengshows/index.js'
+import gansu from './gansu/index.js'
 import gdtv from './gdtv/index.js'
 import gztv from './gztv/index.js'
 import gxtv from './gxtv/index.js'
@@ -149,6 +152,7 @@ const MODULES = [
   chongqing,
   sichuan,
   dalian,
+  gansu,
   gdtv,
   gztv,
   gxtv,
@@ -193,6 +197,9 @@ export function validateModule(module) {
   }
   if (module.channelHlsMode != null && !['proxy', 'relay'].includes(module.channelHlsMode)) {
     throw new Error(`抓取模块 ${module.id} 的 channelHlsMode 非法: ${JSON.stringify(module.channelHlsMode)}`)
+  }
+  if (module.relayProxyCompatible != null && typeof module.relayProxyCompatible !== 'boolean') {
+    throw new Error(`抓取模块 ${module.id} 的 relayProxyCompatible 必须是布尔值`)
   }
   const hasLocalClaim = typeof module.claimsLocalPath === 'function'
   const hasLocalHandler = typeof module.handleLocalRequest === 'function'

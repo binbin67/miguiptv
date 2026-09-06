@@ -1,7 +1,7 @@
 import http from "node:http"
 import { localRequestHandlerFor, resolverFor, shutdownModules } from './extractors/registry.js'
 import { pipeFlv } from './utils/flvProxy.js'
-import { readFileSync, mkdirSync, existsSync } from "node:fs"
+import { readFileSync, mkdirSync, existsSync, statSync } from "node:fs"
 import { createRequire } from "node:module"
 import fetch from 'node-fetch'
 import { adminPath, host, pass, port, programInfoUpdateInterval, token, userId, enableMigu, enableBuiltInSubscriptions, enableUserTokens } from "./config.js";
@@ -1000,15 +1000,30 @@ async function handleRequest(req, res) {
       res.writeHead(400); res.end(); return
     }
     try {
-      const buf = readFileSync(dataPath(`logos/${logoName}`))
+      const file = dataPath(`logos/${logoName}`)
+      // 条件请求（issue #119）：订阅里的台标 URL 已带 ?v=<mtime>，换图即换 URL；这里再补
+      // ETag / Last-Modified，让不认 query 的客户端至少能用 If-None-Match 拿到 304 而不是旧图。
+      const stat = statSync(file)
+      const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`
+      const lastModified = new Date(stat.mtimeMs).toUTCString()
+      const cacheHeaders = { 'Cache-Control': 'public, max-age=86400', ETag: etag, 'Last-Modified': lastModified }
+      const ifNoneMatch = String(headers['if-none-match'] || '')
+      const ifModifiedSince = Date.parse(headers['if-modified-since'] || '')
+      const notModified = ifNoneMatch
+        ? ifNoneMatch.split(',').some(tag => tag.trim() === etag)
+        : Number.isFinite(ifModifiedSince) && Math.floor(stat.mtimeMs / 1000) * 1000 <= ifModifiedSince
+      if (notModified) {
+        res.writeHead(304, cacheHeaders); res.end(); return
+      }
+      const buf = readFileSync(file)
       const ext = logoName.slice(logoName.lastIndexOf('.') + 1).toLowerCase()
       const mime = ext === 'png' ? 'image/png'
         : (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg'
         : ext === 'webp' ? 'image/webp'
         : ext === 'svg' ? 'image/svg+xml'
         : 'application/octet-stream'
-      res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' })
-      res.end(buf)
+      res.writeHead(200, { 'Content-Type': mime, 'Content-Length': buf.length, ...cacheHeaders })
+      res.end(method === 'HEAD' ? undefined : buf)
     } catch (e) {
       res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('logo not found')
     }

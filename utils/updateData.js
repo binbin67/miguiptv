@@ -12,7 +12,7 @@ import { getDateString } from "./time.js"
 import { fetchUrl } from "./net.js"
 import { dataPath } from "./paths.js"
 import { readMiguTokenState, markMiguTokenRefreshed, MIGU_TOKEN_REFRESH_INTERVAL_MS } from "./miguTokenState.js"
-import { readFileSync, existsSync } from "node:fs"
+import { readFileSync, existsSync, statSync } from "node:fs"
 import { announcementM3uEntry, announcementTxtEntry } from "./announcement.js"
 
 const PE_CACHE_PATH = dataPath('pe-cache.json')
@@ -21,14 +21,27 @@ const PE_CACHE_PATH = dataPath('pe-cache.json')
 export const LOGO_EXTS = ['png', 'jpg', 'jpeg', 'webp']
 
 // 查找本地台标 data/logos/<频道名>.<ext>（用户在后台上传或手动放），命中返回可写入 m3u 的相对 URL，否则 ''
+// URL 尾部带 ?v=<文件修改时间>：电视端播放器按 URL 缓存台标（多数永不过期），同名换图后
+// 若 URL 一字不变，用户看到的永远是第一张（issue #119）。服务端路由按路径取文件、
+// 忽略 query，所以版本号只影响客户端缓存键。
 export function findLocalLogo(name) {
   if (!name) return ''
   for (const ext of LOGO_EXTS) {
-    if (existsSync(dataPath(`logos/${name}.${ext}`))) {
-      return `\${replace}/logos/${encodeURIComponent(name)}.${ext}`
+    const file = dataPath(`logos/${name}.${ext}`)
+    if (existsSync(file)) {
+      return `\${replace}/logos/${encodeURIComponent(name)}.${ext}${localLogoVersion(file)}`
     }
   }
   return ''
+}
+
+// 文件修改时间（毫秒整数）作为版本；读不到 stat（并发删除等）就退回无版本 URL，绝不让生成列表失败
+function localLogoVersion(file) {
+  try {
+    return `?v=${Math.floor(statSync(file).mtimeMs)}`
+  } catch {
+    return ''
+  }
 }
 
 /**

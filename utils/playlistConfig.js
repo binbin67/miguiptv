@@ -408,8 +408,8 @@ export function applyConfig(groups, config) {
         channel.name = renamedName
       }
 
-      // 跳过隐藏的频道（按分组独立隐藏）
-      if (!protectedAnnouncement && config.hiddenChannels?.includes(channelKey)) {
+      // 跳过隐藏的频道（按分组独立隐藏）。公告频道同样可隐藏：它只是不能删、不能挪、不能改名。
+      if (config.hiddenChannels?.includes(channelKey)) {
         return
       }
 
@@ -524,7 +524,7 @@ export function applyConfig(groups, config) {
       })
     }
 
-    // 系统公告永远固定在首位；无论旧配置、手工改 JSON 还是将来 UI 回归，都不能下移。
+    // 系统公告只要还在（未被隐藏）就固定在首位；无论旧配置、手工改 JSON 还是将来 UI 回归，都不能下移。
     const announcementIndex = result.findIndex(group => group.name === ANNOUNCEMENT.group)
     if (announcementIndex > 0) result.unshift(...result.splice(announcementIndex, 1))
 

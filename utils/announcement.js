@@ -38,7 +38,9 @@ export function isAnnouncementChannel(channel) {
 }
 
 /**
- * 公告是订阅的系统入口，不允许配置档把它隐藏、删除、移动或改序。
+ * 公告是订阅的系统入口：不允许配置档把它删除、移动、重命名或改序，
+ * 但允许隐藏——要不要在电视上放这条短片由站长自己决定（issue #119），
+ * 隐藏走普通的 hiddenChannels，随时可在「已隐藏」里恢复。
  * 返回副本，避免读取/校验过程中反向修改调用方持有的配置对象。
  */
 export function protectAnnouncementConfig(input = {}) {
@@ -54,7 +56,7 @@ export function protectAnnouncementConfig(input = {}) {
     groupSortMode: { ...(input.groupSortMode || {}) },
   }
 
-  config.hiddenChannels = config.hiddenChannels.filter(key => key !== ANNOUNCEMENT_CHANNEL_KEY)
+  // hiddenChannels 原样保留：公告可隐藏。
   // 精确删除项直接清掉；更宽的通配符仍需保留给其它分组，applyConfig 会单独豁免公告。
   config.deletedGroups = config.deletedGroups.filter(pattern => pattern !== ANNOUNCEMENT.group)
   delete config.channelGroupMap[ANNOUNCEMENT_CHANNEL_KEY]

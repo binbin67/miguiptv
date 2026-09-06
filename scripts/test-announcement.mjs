@@ -46,7 +46,8 @@ const protectedConfig = protectAnnouncementConfig({
   groupRenameMap: { 公告: '别的名字', 央视: '中央台' },
   groupSortMode: { 公告: 'name', 央视: 'name' },
 })
-assert.deepEqual(protectedConfig.hiddenChannels, ['央视::c1'])
+// 隐藏放行（issue #119）：公告可隐藏，其余保护项不变
+assert.deepEqual(protectedConfig.hiddenChannels, [ANNOUNCEMENT_CHANNEL_KEY, '央视::c1'])
 assert.deepEqual(protectedConfig.deletedGroups, ['公*', '影视'])
 assert.deepEqual(protectedConfig.groupOrder, ['公告', '体育', '央视'])
 assert.equal(protectedConfig.channelGroupMap[ANNOUNCEMENT_CHANNEL_KEY], undefined)
@@ -56,19 +57,29 @@ assert.equal(protectedConfig.groupRenameMap.公告, undefined)
 assert.equal(protectedConfig.groupSortMode.公告, undefined)
 assert.equal(protectedConfig.channelGroupMap['央视::c1'], '收藏')
 
-const forced = applyConfig([
+const sampleGroups = () => [
   { name: '央视', channels: [{ id: 'c1', name: 'CCTV1', tvgId: 'CCTV1', tvgName: 'CCTV1', originalGroup: '央视' }] },
   { name: '公告', channels: [{ id: ANNOUNCEMENT.tvgId, name: ANNOUNCEMENT.name, tvgId: ANNOUNCEMENT.tvgId, tvgName: ANNOUNCEMENT.name, originalGroup: '公告', url: `\${replace}${ANNOUNCEMENT.videoPath}` }] },
-], {
-  hiddenChannels: [ANNOUNCEMENT_CHANNEL_KEY],
+]
+const hostileConfig = () => ({
+  hiddenChannels: [],
   deletedGroups: ['公*'],
   groupOrder: ['央视', '公告'],
   channelGroupMap: { [ANNOUNCEMENT_CHANNEL_KEY]: '央视' },
   channelRenameMap: { [ANNOUNCEMENT_CHANNEL_KEY]: '伪公告' },
   channelOrder: {}, groupRenameMap: { 公告: '其它' }, groupSortMode: {}, customGroups: [],
 })
+
+// 删除 / 移动 / 重命名 / 改序全部无效，公告仍以原名固定在首位
+const forced = applyConfig(sampleGroups(), hostileConfig())
 assert.equal(forced[0].name, ANNOUNCEMENT.group)
 assert.equal(forced[0].channels.length, 1)
 assert.equal(forced[0].channels[0].name, ANNOUNCEMENT.name)
+
+// 隐藏是唯一放行的操作（issue #119）：隐藏后公告分组整个不出现，其它分组不受影响
+const hidden = applyConfig(sampleGroups(), { ...hostileConfig(), hiddenChannels: [ANNOUNCEMENT_CHANNEL_KEY] })
+assert.equal(hidden.some(group => group.name === ANNOUNCEMENT.group), false)
+assert.equal(hidden.some(group => group.channels.some(channel => channel.id === ANNOUNCEMENT.tvgId)), false)
+assert.deepEqual(hidden.map(group => group.name), ['央视'])
 
 console.log('全部通过：公告条目、视频与台标资源有效 ✅')

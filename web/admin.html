@@ -2047,6 +2047,12 @@
             cursor: move;
         }
 
+        /* 系统公告只有一条、名字又带站名后缀，260px 的格子放不下会截成省略号：
+           让它独占一整行（issue #119）。1 / -1 只跨显式列，窄屏单列时也不会溢出。 */
+        .my-playlist-channel.system-announcement {
+            grid-column: 1 / -1;
+        }
+
         .my-playlist-channel.batch-mode {
             cursor: default;
         }
@@ -8100,7 +8106,7 @@ if(success){
                 container.innerHTML = `
                     <div class="my-playlist-channels">
                         ${group.channels.map(channel => `
-                            <div class="my-playlist-channel deleted ${isBatchMode ? 'batch-mode' : ''} ${channel.id === lastEditedChannelId ? 'recently-edited' : ''}" data-channel-id="${channel.id}">
+                            <div class="my-playlist-channel deleted ${isBatchMode ? 'batch-mode' : ''} ${isSystemAnnouncementChannel(channel) ? 'system-announcement' : ''} ${channel.id === lastEditedChannelId ? 'recently-edited' : ''}" data-channel-id="${channel.id}">
                                 ${isBatchMode ? `
                                     <input type="checkbox" class="my-playlist-channel-checkbox"
                                            onchange="toggleChannelSelection('${channel.id}')"
@@ -8139,7 +8145,7 @@ if(success){
                 // 根据批量模式显示不同的操作按钮
                 if (isProtectedAnnouncement) {
                     selectedChannels.delete(SYSTEM_ANNOUNCEMENT_ID);
-                    actions.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;color:#5b6b80;font-size:13px;">🔒 系统公告固定置顶，不支持隐藏、删除或调整位置</span>`;
+                    actions.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;color:#5b6b80;font-size:13px;">🔒 系统公告固定置顶，可隐藏，不支持删除、移动或调整位置</span>`;
                 } else if (isBatchMode) {
                     const selectedCount = selectedChannels.size;
                     const batchMoveOpts = myPlaylistData.map(g => {
@@ -8179,7 +8185,7 @@ if(success){
                             ${group.channels.map(channel => {
                                 const isProtected = isSystemAnnouncementChannel(channel);
                                 return `
-                                <div class="my-playlist-channel ${isBatchMode ? 'batch-mode' : ''} ${channel.id === lastEditedChannelId ? 'recently-edited' : ''}" data-channel-id="${channel.id}"
+                                <div class="my-playlist-channel ${isBatchMode ? 'batch-mode' : ''} ${isProtected ? 'system-announcement' : ''} ${channel.id === lastEditedChannelId ? 'recently-edited' : ''}" data-channel-id="${channel.id}"
                                      ${!isProtected && !isBatchMode && !isNameSorted ? `draggable="true" ondragstart="onChannelDragStart(event, '${channel.id}')" ondragend="onChannelDragEnd(event)" ondragover="onChannelDragOver(event)" ondrop="onChannelDrop(event, '${channel.id}')"` : ''}>
                                     ${isProtected ? `<span class="channel-drag-handle" aria-hidden="true" title="系统公告固定置顶">🔒</span>` : isBatchMode ? `
                                         <input type="checkbox" class="my-playlist-channel-checkbox"
@@ -8190,7 +8196,7 @@ if(success){
                                     <div class="my-playlist-channel-name" title="点击查看详情：${channel.name}" onclick="showChannelDetail('${channel.id}', false)" style="cursor: pointer;">
                                         <span class="channel-detail-hint" aria-hidden="true">ⓘ</span>${channel.name}${channelSourceBadge(channel)}
                                     </div>
-                                    ${!isProtected && !isBatchMode ? `
+                                    ${!isBatchMode ? `
                                         <div class="my-playlist-channel-actions">
                                             ${channel.url ? `<button class="channel-play-btn" title="在页面里播放" onclick="event.stopPropagation(); playInlineById('${channel.id}')">▶ 播放</button>` : ''}
                                             <button onclick="event.stopPropagation(); hideChannel('${channel.id}')">隐藏</button>
@@ -8589,7 +8595,8 @@ if(success){
                 return;
             }
             if (isSystemAnnouncementGroup(group)) {
-                showStatus('系统公告分组不能隐藏', 'error');
+                // 「隐藏分组」实际写的是 deletedGroups，公告不可删除；想不显示走频道行的「隐藏」
+                showStatus('系统公告分组不支持整组隐藏，请在频道行点「隐藏」', 'error');
                 return;
             }
             if (isCustomGroupName(group.name)) {
@@ -8653,11 +8660,8 @@ if(success){
             return channel?.originalGroup || getOriginalGroupName(displayGroupName);
         }
 
+        // 系统公告频道也走这里：它可隐藏（issue #119），只是不能删除、移动、重命名
         async function hideChannel(channelId) {
-            if (channelId === SYSTEM_ANNOUNCEMENT_ID) {
-                showStatus('系统公告频道不能隐藏', 'error');
-                return;
-            }
             const group = myPlaylistData[selectedGroupIndex];
             const channel = group?.channels.find(c => c.id === channelId);
             const originalGroupName = channelOriginalGroupName(channel, group.name);
@@ -9295,6 +9299,50 @@ if(success){
             const isExternal = sourceType === 'external';
             currentChannelDetail = { ...channel, groupName, isExternal, isDeleted };
 
+            // 系统公告频道只有一件事可做：给不给电视端看。频道 ID、节目单配对、别名、TVG、台标上传、
+            // 移动、重命名、复制对它全无意义，一概不渲染（issue #119）；只留播放预览和隐藏 / 恢复。
+            // 删除、移动、排序、重命名仍由服务端 protectAnnouncementConfig 兜底拒绝。
+            if (isProtectedAnnouncement) {
+                const baseUrl = window.location.origin + window.location.pathname.replace(/\/[^/]+$/, '');
+                const actualUrl = String(channel.url || '').replace(/\$\{replace\}/g, baseUrl);
+                const escUrl = actualUrl.replace(/'/g, "\\'");
+                const escName = (channel.name || '').replace(/'/g, "\\'");
+                const originalGroup = channel.originalGroup || groupName || '公告';
+                const isHidden = isDeleted || (myPlaylistConfig.hiddenChannels || []).includes(`${originalGroup}::${channel.id}`);
+                const detailAction = isHidden
+                    ? `<button class="btn btn-sm btn-primary" onclick="closeChannelDetail(); restoreChannel('${channel.id}', '${originalGroup.replace(/'/g, "\\'")}')">恢复显示</button>`
+                    : `<button class="btn btn-sm" onclick="closeChannelDetail(); hideChannel('${channel.id}')">隐藏此频道</button>`;
+                document.getElementById('channelDetailTitle').textContent = `频道详情 - ${channel.name}`;
+                document.getElementById('channelDetailContent').innerHTML = `
+                    <div style="line-height: 1.8;">
+                        <div style="margin-bottom: 15px;">
+                            <strong style="color: #667eea;">频道名称：</strong>
+                            <span>${escapeHtml(channel.name || '')}</span>
+                            ${isHidden ? '<span style="color: #999; margin-left: 10px;">(已隐藏)</span>' : ''}
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <strong style="color: #667eea;">所属分组：</strong>
+                            <span>${escapeHtml(groupName || '公告')}</span>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <strong style="color: #667eea;">播放地址：</strong>
+                            <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-top: 5px; word-break: break-all; font-family: monospace; font-size: 12px;">${escapeHtml(actualUrl)}</div>
+                            <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                <button class="btn btn-sm btn-primary" onclick="playInline('${escUrl}', '${escName}')">▶ 在页面里播放</button>
+                                <button class="btn btn-sm" onclick="copyToClipboard('${escUrl}', '播放地址')">📋 复制地址</button>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:15px;padding:10px 12px;background:#f0f7ff;border:1px solid #cfe2ff;border-radius:6px;color:#456078;font-size:13px;line-height:1.7;">
+                            🔒 系统公告频道：项目自带的使用说明与版权提示短片，显示时固定在订阅第一位，不支持删除、移动、排序或重命名。不想在电视上显示可以隐藏，随时能在「已隐藏」里恢复。
+                            <div style="margin-top:8px;">${detailAction}</div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('channelDetailEditBtn').style.display = 'none';
+                document.getElementById('channelDetailModal').style.display = 'block';
+                return;
+            }
+
             // 构建详情HTML
             let detailHTML = `
                 <div style="line-height: 1.8;">
@@ -9379,14 +9427,8 @@ if(success){
                 `;
             }
 
-            // 单频道归类：移动到其它分组（隐藏/已删除视图下不提供）
-            if (!isDeleted && isProtectedAnnouncement) {
-                detailHTML += `
-                    <div style="margin-bottom:15px;padding:10px 12px;background:#f0f7ff;border:1px solid #cfe2ff;border-radius:6px;color:#456078;font-size:13px;">
-                        🔒 这是系统公告频道，固定在订阅第一位，不支持隐藏、删除、移动、排序或重命名。
-                    </div>
-                `;
-            } else if (!isDeleted) {
+            // 单频道归类：移动到其它分组（隐藏/已删除视图下不提供；公告频道已在上方提前返回）
+            if (!isDeleted) {
                 const moveKey = `${groupName}::${channelId}`;
                 const renamedOriginal = (myPlaylistConfig.groupRenameMap && myPlaylistConfig.groupRenameMap[groupName]) || groupName;
                 const currentTarget = (myPlaylistConfig.channelGroupMap && myPlaylistConfig.channelGroupMap[moveKey]) || renamedOriginal;
@@ -10059,7 +10101,11 @@ if(success){
                 } else {
                     let sameOrigin = false;
                     try { sameOrigin = new URL(url, window.location.href).origin === window.location.origin; } catch (e) {}
-                    const looksHls = /\.m3u8(?:[?#]|$)/i.test(url) || sameOrigin;
+                    // 同源地址默认按 HLS：延迟解析频道的旧地址没有 .m3u8 后缀，但本机按 HLS 直出。
+                    // 例外是本机静态媒体（公告短片 /assets/announcement.mp4 等）：必须走原生播放，
+                    // 喂给 hls.js 只会得到 manifestParsingError（issue #119）。
+                    const looksDirectMedia = /\.(?:mp4|m4v|webm|mov|mp3|m4a|aac|ogg)(?:[?#]|$)/i.test(url);
+                    const looksHls = !looksDirectMedia && (/\.m3u8(?:[?#]|$)/i.test(url) || sameOrigin);
                     let hlsReady = false;
                     if (looksHls) {
                         try { await loadScriptOnce('https://cdn.jsdelivr.net/npm/hls.js@1', () => window.Hls); hlsReady = !!(window.Hls && Hls.isSupported()); } catch (e) {}

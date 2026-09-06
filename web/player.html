@@ -210,11 +210,14 @@
                 let sameOriginStream = false;
                 try { sameOriginStream = new URL(videoUrl, window.location.href).origin === window.location.origin; } catch {}
                 const isFlv = /\.flv(?:[?#]|$)/i.test(videoUrl);
-                const videoType = isFlv ? 'flv' : videoUrl.toLowerCase().includes('.m3u8') || sameOriginStream ? 'hls' : 'auto';
+                // 本机静态媒体（公告短片 /assets/announcement.mp4 等）不是直播流：走原生播放并放开进度条，
+                // 按同源规则交给 hls.js 只会 manifestParsingError（issue #119）。
+                const isDirectMedia = /\.(?:mp4|m4v|webm|mov|mp3|m4a|aac|ogg)(?:[?#]|$)/i.test(videoUrl);
+                const videoType = isFlv ? 'flv' : (!isDirectMedia && (videoUrl.toLowerCase().includes('.m3u8') || sameOriginStream)) ? 'hls' : 'auto';
                 
                 const dp = new DPlayer({
                     container: document.getElementById('dplayer'),
-                    live: true,
+                    live: !isDirectMedia,
                     autoplay: true,
                     screenshot: true,
                     hotkey: true,

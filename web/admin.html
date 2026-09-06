@@ -4290,7 +4290,16 @@
                         <button id="yspLoginCheck" class="btn btn-sm" onclick="checkYspBrowserLogin()">检查登录态</button>
                         <button id="yspLoginClose" class="btn btn-sm" onclick="closeYspBrowserSession()">关闭后台浏览器</button>
                     </div>
-                    <div id="yspLoginMessage" style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">登录态保存在服务端数据目录的专用浏览器 profile；10 个会员频道共用，无需逐台导入。自动弹窗只支持从运行服务的电脑本机访问 localhost 后台，Docker/NAS 无桌面环境暂不支持。</div>
+                    <div id="yspLoginMessage" style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">登录态保存在服务端数据目录的专用浏览器 profile；10 个会员频道共用，无需逐台导入。自动弹窗只支持从运行服务的电脑本机访问 localhost 后台；Docker / NAS 等没有桌面的部署请用下方书签工具导入登录态。</div>
+                    <div class="bookmarklet-actions" style="margin-top:10px;">
+                        <a id="yspBookmarklet" class="bookmarklet-link" draggable="true">获取央视频登录态</a>
+                        <a href="https://www.yangshipin.cn/tv/home" target="_blank" rel="noreferrer">打开央视频官网 ↗</a>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:flex-start; margin-top:8px; flex-wrap:wrap;">
+                        <textarea id="yspLoginImportInput" rows="2" placeholder="粘贴书签工具复制的登录态（以 YSP1. 开头）；也接受从开发者工具复制的整段 Cookie 值" style="flex:1; min-width:240px; padding:6px 8px; border:1px solid #ddd; border-radius:4px; font-size:12px; font-family:monospace; resize:vertical;"></textarea>
+                        <button id="yspLoginImport" class="btn btn-sm btn-primary" onclick="importYspLoginState()">导入登录态</button>
+                    </div>
+                    <div style="font-size:12px; color:#888; margin-top:6px; line-height:1.7;">在自己电脑的浏览器里登录央视频官网，把「获取央视频登录态」拖到书签栏，在已登录的官网页面点击它，复制结果粘贴到上方并导入。导入的 cookie 只写进服务端浏览器 profile，不进配置文件；服务端之后会自动续期，官网撤销或长期失效时重新导入即可。</div>
                 </div>`;
             }
             if (key === 'beijing-cookie') {
@@ -4580,6 +4589,7 @@
             initMiguBookmarklet();
             initFengshowsBookmarklet();
             initSichuanBookmarklet();
+            initYspBookmarklet();
             initYspLoginHelper();
             // 记录本次渲染的初始值，保存时只提交用户改过的字段（见函数注释）
             captureExtractorInitialValues(m);
@@ -4717,17 +4727,19 @@
             } else if (authenticated) {
                 label = `⚠️ ${account.nickname || '已登录'} · 未识别 VIP`;
             } else if (!available) {
-                label = '当前环境无法弹出登录窗';
+                label = '未登录 · 请用书签工具导入登录态';
             } else if (!yspLoginLocalPage && !authenticated) {
-                label = '首次登录请在服务本机操作';
+                label = '未登录 · 本机弹窗或书签工具导入';
             }
             state.textContent = label;
             state.className = className;
             detail.textContent = (data && (available
                 ? (data.message || data.reason)
                 : (data.reason || data.message))) || '尚未检测到有效央视频登录态。';
-            if (!yspLoginLocalPage && available) {
-                detail.textContent += ' 如需打开登录窗口，请在运行服务的电脑上用 localhost 访问后台。';
+            if (!authenticated && !active) {
+                detail.textContent += available && yspLoginLocalPage
+                    ? ' 也可以用下方书签工具从自己电脑的浏览器导入登录态。'
+                    : ' 请用下方「获取央视频登录态」书签工具从自己电脑的浏览器导入；在运行服务的电脑上用 localhost 打开后台时也可直接弹出官方登录窗。';
             }
             detail.style.color = (data && data.status === 'error') || !available ? '#ff4d4f' : '#888';
             if (open) {
@@ -4762,6 +4774,49 @@
             renderYspLoginState(r.data || {});
             if (r.data && r.data.active) yspLoginTimer = setTimeout(() => pollYspBrowserLogin(gen), 1000);
             else yspLoginTimer = null;
+        }
+
+        // 央视频登录态书签工具：官网 SDK 用 js-cookie 把登录材料写在 yangshipin.cn 域下、都不是
+        // HttpOnly，所以在已登录的官网页面读 document.cookie 就能拿全。整包 base64 后带 YSP1. 前缀，
+        // 服务端只认这个形态或整段 Cookie 头；服务端会把它种进自己的浏览器 profile 并让 SDK 校验。
+        function initYspBookmarklet() {
+            const link = document.getElementById('yspBookmarklet');
+            if (!link) return;
+            link.href = `javascript:(()=>{try{
+if(!/(^|\\.)yangshipin\\.cn$/i.test(location.hostname))throw new Error('请先打开央视频官网（yangshipin.cn）并登录，再点击此书签');
+const cookies={};document.cookie.split(';').forEach(p=>{const i=p.indexOf('=');if(i>0){const k=p.slice(0,i).trim();const v=p.slice(i+1).trim();if(k&&v)cookies[k]=v;}});
+if(!cookies.ysp_strRefreshtoken&&!cookies.vusession&&!cookies.ysp_openid&&!cookies.yspopenid)throw new Error('没有检测到央视频登录态：请先在官网右上角登录（刷新页面后再试）');
+const payload='YSP1.'+btoa(unescape(encodeURIComponent(JSON.stringify({v:1,at:Date.now(),host:location.hostname,cookies}))));
+navigator.clipboard.writeText(payload).then(()=>alert('央视频登录态已复制，请粘贴到 IPTV 源管理 → 央视频 → 导入登录态。')).catch(()=>prompt('请复制央视频登录态：',payload));
+}catch(e){alert(e.message)}})()`;
+        }
+
+        async function importYspLoginState() {
+            const input = document.getElementById('yspLoginImportInput');
+            const button = document.getElementById('yspLoginImport');
+            const payload = (input && input.value || '').trim();
+            if (!payload) { showStatus('请先粘贴书签工具复制的登录态', 'error'); return; }
+            stopYspLoginPolling();
+            const gen = yspLoginGen;
+            const detail = document.getElementById('yspLoginMessage');
+            if (detail) { detail.textContent = '正在把登录态种进服务端浏览器并让官网校验，约需十几秒…'; detail.style.color = '#888'; }
+            if (button) { button.disabled = true; button.textContent = '导入中…'; }
+            let r = null;
+            try { r = await extractorPost({ action: 'browserLoginImport', id: 'yangshipin', payload }); }
+            catch (e) { r = null; }
+            if (button) { button.disabled = false; button.textContent = '导入登录态'; }
+            if (gen !== yspLoginGen || selectedExtractorId !== 'yangshipin') return;
+            if (!r || !r.success) {
+                // 导入没通过不等于「读不到登录态」：徽标照实标未登录，红字只写官网给的原因，粘贴内容保留以便重试
+                const state = document.getElementById('yspLoginState');
+                if (state) { state.textContent = '未登录 · 导入未通过官网校验'; state.className = 'login-state-badge off'; }
+                if (detail) { detail.textContent = (r && r.message) || '导入登录态失败'; detail.style.color = '#ff4d4f'; }
+                showStatus((r && r.message) || '导入登录态失败', 'error');
+                return;
+            }
+            if (input) input.value = '';
+            renderYspLoginState(r.data || {});
+            showStatus(r.data?.authenticated ? '央视频登录态已导入并通过官网校验' : '登录态已导入，但官网未识别到账号', r.data?.authenticated ? 'success' : 'error');
         }
 
         function initYspLoginHelper() {

@@ -15,7 +15,7 @@ import { getExtractorManager, getModuleConfig } from "./utils/extractorManager.j
 import { getExtractorsAPI, startModuleLoginAPI, pollModuleLoginAPI, setExtractorEnabledAPI,
   updateExtractorConfigAPI, runExtractorNowAPI, setContentFlagAPI, startBrowserLoginAPI,
   getBrowserLoginStatusAPI, checkBrowserLoginAPI, cancelBrowserLoginAPI,
-  closeBrowserLoginAPI } from "./utils/extractorsAPI.js";
+  closeBrowserLoginAPI, importBrowserLoginAPI } from "./utils/extractorsAPI.js";
 import { getChannelsAPI, getExternalSourcesAPI, saveExternalSourcesAPI,
          addExternalSourceAPI, removeExternalSourceAPI, updateExternalSourceAPI,
          setExternalSourceM3u8API, importSubscriptionAPI, parseLocalContentAPI,
@@ -607,6 +607,10 @@ async function handleRequest(req, res) {
             break
           case 'browserLoginClose':
             result = await closeBrowserLoginAPI(data.id)
+            break
+          // 导入登录态不受「仅本机」限制：它就是给 Docker / NAS 这类远程后台用的
+          case 'browserLoginImport':
+            result = await importBrowserLoginAPI(data.id, data.payload)
             break
           case 'toggleModule':
             result = setExtractorEnabledAPI(data.id, data.enabled !== false)

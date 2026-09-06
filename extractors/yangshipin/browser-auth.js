@@ -23,6 +23,70 @@ export function browserLoginAvailability({ platform = process.platform, env = pr
   }
 }
 
+/**
+ * 官网登录 SDK 用 js-cookie 把登录材料写在 yangshipin.cn 域下（都不是 HttpOnly），其中
+ * 刷新令牌一组 48 小时有效、ysp_openid 84 分钟、vusession 一天；SDK 的 isSigned() 只看
+ * endtime 判断要不要拿刷新令牌换新一套。这里列的是「有它才算带着登录态」的身份 cookie。
+ */
+export const LOGIN_IDENTITY_COOKIES = Object.freeze(['ysp_strRefreshtoken', 'vusession', 'ysp_openid', 'yspopenid'])
+export const IMPORT_PREFIX = 'YSP1.'
+const IMPORT_COOKIE_TTL_S = 48 * 3600
+const MAX_IMPORT_COOKIES = 120
+const COOKIE_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/
+
+function cookiesFromHeader(text) {
+  const out = {}
+  for (const part of String(text).split(';')) {
+    const index = part.indexOf('=')
+    if (index <= 0) continue
+    const name = part.slice(0, index).trim()
+    const value = part.slice(index + 1).trim()
+    if (name) out[name] = value
+  }
+  return out
+}
+
+/**
+ * 解析后台粘贴进来的登录态。三种形态都收：
+ * - 书签工具产出的 `YSP1.<base64 JSON>`（首选，带来源主机与时间）；
+ * - 直接粘 JSON（{ cookies: {...} } 或裸 {name: value}）；
+ * - 从开发者工具复制的整段 Cookie 请求头（a=b; c=d）。
+ * 只做形态与名字合法性校验，不猜每个 cookie 的含义——SDK 自己会用它认得的那些。
+ * 返回 [{ name, value }]；没有任何身份 cookie 时抛错，避免把一堆统计 cookie 当登录态种进去。
+ */
+export function parseImportedLoginState(payload) {
+  let text = String(payload ?? '').trim()
+  if (!text) throw new Error('请先粘贴书签工具复制的央视频登录态')
+  if (text.length > 64 * 1024) throw new Error('登录态内容过长，不像是书签工具的输出')
+  let cookies
+  if (text.startsWith(IMPORT_PREFIX)) {
+    let decoded
+    try { decoded = JSON.parse(Buffer.from(text.slice(IMPORT_PREFIX.length), 'base64').toString('utf8')) }
+    catch { throw new Error('登录态内容无法解析，请重新点击书签工具复制完整内容') }
+    cookies = decoded?.cookies
+  } else if (text.startsWith('{')) {
+    let decoded
+    try { decoded = JSON.parse(text) } catch { throw new Error('登录态 JSON 无法解析') }
+    cookies = decoded?.cookies && typeof decoded.cookies === 'object' ? decoded.cookies : decoded
+  } else {
+    cookies = cookiesFromHeader(text)
+  }
+  if (!cookies || typeof cookies !== 'object' || Array.isArray(cookies)) throw new Error('登录态内容里没有 cookie 列表')
+  const list = []
+  for (const [rawName, rawValue] of Object.entries(cookies)) {
+    const name = String(rawName).trim()
+    if (!COOKIE_NAME_RE.test(name)) continue
+    const value = String(rawValue ?? '').trim()
+    if (!value || value.length > 4096 || /[;\r\n\u0000-\u001f]/.test(value)) continue
+    list.push({ name, value })
+    if (list.length > MAX_IMPORT_COOKIES) throw new Error('登录态里的 cookie 数量异常，请只在央视频官网页面使用书签工具')
+  }
+  if (!list.some(cookie => LOGIN_IDENTITY_COOKIES.includes(cookie.name))) {
+    throw new Error('内容里没有央视频登录 cookie；请先在官网右上角完成登录，再在同一页面点击书签工具')
+  }
+  return list
+}
+
 export class LoginRequiredError extends Error {
   constructor(message = '央视频登录态不存在或已过期，请先在服务所在电脑本机完成登录') {
     super(message)
@@ -40,11 +104,15 @@ export class YspBrowserSession {
     launchImpl = launchBrowser,
     closeImpl = closeBrowser,
     logger = () => {},
+    // 每次「确定性」读到账号结果时回调（SDK 明确说有 / 没有登录）；读取过程本身出错不回调，
+    // 免得一次网络抖动就把「已关联」的记录抹掉。runtime 用它维护保活用的关联标记。
+    onAccount = () => {},
   } = {}) {
     this.profileDir = resolve(profileDir)
     this.launchImpl = launchImpl
     this.closeImpl = closeImpl
     this.logger = logger
+    this.onAccount = onAccount
     this.browser = null
     this.page = null
     this.visible = false
@@ -155,6 +223,7 @@ export class YspBrowserSession {
       const hasLoginCookie = cookies.some(cookie => ['ysp_openid', 'yspopenid', 'vusession'].includes(cookie.name) && cookie.value)
       if (!hasLoginCookie) {
         this.account = null
+        this.notifyAccount({ authenticated: false, account: null })
         return { running: true, visible: this.visible, authenticated: false, account: null }
       }
       const account = await this.page.evaluate(async () => {
@@ -169,12 +238,46 @@ export class YspBrowserSession {
         }
       })
       this.account = account
+      this.notifyAccount({ authenticated: Boolean(account), account })
       return { running: true, visible: this.visible, authenticated: Boolean(account), account }
     } catch (error) {
       this.account = null
       this.logger(`读取央视频登录态失败：${firstLine(error)}`)
       return { running: this.running, visible: this.visible, authenticated: false, account: null }
     }
+  }
+
+  notifyAccount(status) {
+    try { this.onAccount(status) } catch (error) { this.logger(`记录央视频账号状态失败：${firstLine(error)}`) }
+  }
+
+  /**
+   * 把用户在自己浏览器里拿到的登录 cookie 种进后台 profile（Docker / NAS 没有桌面时的登录路径）。
+   * 先清掉 profile 里旧的 yangshipin.cn cookie 再写，避免新旧两套令牌混用；然后重新加载首页
+   * 让 SDK 用新 cookie 初始化，readAccount 里的 sdk.info() 会在需要时自动拿刷新令牌换新一套，
+   * 相当于把登录态「接管」到服务端。返回和 readAccount 同构的状态。
+   */
+  async importLoginCookies(cookies) {
+    return this.withLifecycle(async () => {
+      const page = await this.ensureBrowserNow({ visible: false })
+      const stale = await page.cookies('https://www.yangshipin.cn', 'https://yangshipin.cn')
+      if (stale.length) await page.deleteCookie(...stale.map(cookie => ({ name: cookie.name, domain: cookie.domain, path: cookie.path })))
+      const expires = Math.floor(Date.now() / 1000) + IMPORT_COOKIE_TTL_S
+      await page.setCookie(...cookies.map(cookie => ({
+        name: cookie.name,
+        value: cookie.value,
+        domain: '.yangshipin.cn',
+        path: '/',
+        expires,
+        secure: false,
+        httpOnly: false,
+      })))
+      this.account = null
+      this.logger(`已导入 ${cookies.length} 个央视频登录 cookie，正在让官网 SDK 校验`)
+      await page.goto(YSP_HOME, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await this.ensureHome()
+      return this.readAccount()
+    })
   }
 
   async openLogin() {

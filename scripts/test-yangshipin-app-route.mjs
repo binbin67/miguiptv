@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -55,7 +55,7 @@ writeFileSync(join(DATA_DIR, 'external-sources.json'), JSON.stringify({
 
 const { AUTH_CHANNEL_BY_REF } = await import('../extractors/yangshipin/channels.js')
 const { createTrackState } = await import('../extractors/yangshipin/vip-bridge.js')
-const { runtime } = await import('../extractors/yangshipin/runtime.js')
+const { runtime, runLoginKeepalive } = await import('../extractors/yangshipin/runtime.js')
 
 const channel = AUTH_CHANNEL_BY_REF.get('ysp-vip-cctvfyzq')
 const mediaBody = Buffer.from('0123456789')
@@ -229,6 +229,48 @@ try {
     const payload = JSON.parse(status.body)
     assert.equal(payload.success, true)
     assert.equal(payload.data.running, false)
+  })
+
+  await check('导入登录态不受「仅本机」限制：远端 Host 可调用；内容不对时在解析阶段就拒绝，不启动 Chromium', async () => {
+    const headers = { Host: `nas.example.test:${PORT}`, 'Content-Type': 'application/json' }
+    const post = payload => request(`/${PASS}/api/extractors`, {
+      method: 'POST', headers, body: JSON.stringify({ action: 'browserLoginImport', id: 'yangshipin', payload }),
+    })
+    const noIdentity = await post('ysp_pc=1; ysp_uv=2')
+    // 动作失败按既有约定回 400 + {success:false}，但绝不能是 403 LOCAL_BROWSER_LOGIN_ONLY
+    assert.equal(noIdentity.status, 400, noIdentity.body.toString())
+    const denied = JSON.parse(noIdentity.body)
+    assert.equal(denied.success, false)
+    assert.notEqual(denied.code, 'LOCAL_BROWSER_LOGIN_ONLY')
+    assert.match(denied.message, /没有央视频登录 cookie/)
+
+    const empty = JSON.parse((await post('')).body)
+    assert.equal(empty.success, false)
+    assert.match(empty.message, /粘贴/)
+
+    const notString = JSON.parse((await request(`/${PASS}/api/extractors`, {
+      method: 'POST', headers, body: JSON.stringify({ action: 'browserLoginImport', id: 'yangshipin', payload: { cookies: {} } }),
+    })).body)
+    assert.equal(notString.success, false)
+  })
+
+  await check('关联标记只在官网确认登录后写入、未登录即清除；未关联时保活直接跳过、不碰浏览器', async () => {
+    const marker = runtime.loginLink.markerPath
+    assert.ok(marker.startsWith(DATA_DIR), '标记必须落在数据目录')
+    assert.equal(existsSync(marker), false)
+    assert.deepEqual(await runLoginKeepalive(), { skipped: 'unlinked' })
+
+    runtime.loginLink.remember({ authenticated: true, account: { nickname: '测试账号', vip: true } })
+    assert.equal(existsSync(marker), true)
+    assert.equal(runtime.loginLink.read().nickname, '测试账号')
+    assert.equal(runtime.loginLink.read().vip, true)
+    const linkedAt = runtime.loginLink.read().linkedAt
+    runtime.loginLink.remember({ authenticated: true, account: { nickname: '测试账号', vip: false } })
+    assert.equal(runtime.loginLink.read().linkedAt, linkedAt, '重复确认不改首次关联时间')
+
+    runtime.loginLink.remember({ authenticated: false, account: null })
+    assert.equal(existsSync(marker), false)
+    assert.deepEqual(await runLoginKeepalive(), { skipped: 'unlinked' })
   })
 
   assert.equal(chromiumStarts, 0, '测试不应尝试启动 Chromium')

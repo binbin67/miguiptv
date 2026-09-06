@@ -1,8 +1,13 @@
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+
 import { printBlue, printRed, printYellow } from '../../utils/colorOut.js'
+import { dataPath } from '../../utils/paths.js'
 import { AUTH_CHANNEL_BY_ID, AUTH_CHANNEL_BY_REF } from './channels.js'
 import {
   browserLoginAvailability,
   LoginRequiredError,
+  parseImportedLoginState,
   YspBrowserLogin,
   YspBrowserSession,
 } from './browser-auth.js'
@@ -12,7 +17,40 @@ const firstLine = error => String(error?.message || error || '未知错误').spl
 const log = message => printBlue(`[央视频] ${message}`)
 const ACCOUNT_STATUS_TTL = 5 * 60_000
 
-const browserSession = new YspBrowserSession({ logger: log })
+/**
+ * 登录态保活。官网 SDK 只在浏览器页面开着时才续期：刷新令牌 48 小时一到就作废，而后台
+ * Chromium 会员频道停播 45 秒后就关掉、不会自己再开——家里两天没人看会员频道，登录就没了。
+ * 所以只要「关联过账号」（标记文件在），就每隔一段时间静默拉起后台会话、让 SDK 续一次
+ * 再由空闲回收关掉。标记里只有昵称和时间，不含任何凭据；没关联过的部署永远不会为此启动浏览器。
+ */
+const LOGIN_LINK_MARKER = dataPath('yangshipin/login-linked.json')
+const LOGIN_KEEPALIVE_INTERVAL_MS = 6 * 60 * 60_000
+const LOGIN_KEEPALIVE_INITIAL_DELAY_MS = 90_000
+
+function readLoginLink() {
+  try { return JSON.parse(readFileSync(LOGIN_LINK_MARKER, 'utf8')) } catch { return null }
+}
+
+function rememberLoginLink(status) {
+  try {
+    if (status?.authenticated) {
+      mkdirSync(dirname(LOGIN_LINK_MARKER), { recursive: true })
+      writeFileSync(LOGIN_LINK_MARKER, JSON.stringify({
+        linkedAt: readLoginLink()?.linkedAt || new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
+        nickname: String(status.account?.nickname || ''),
+        vip: status.account?.vip === true,
+      }, null, 2))
+      scheduleLoginKeepalive()
+    } else if (existsSync(LOGIN_LINK_MARKER)) {
+      unlinkSync(LOGIN_LINK_MARKER)
+    }
+  } catch (error) {
+    printYellow(`[央视频] 记录登录关联状态失败：${firstLine(error)}`)
+  }
+}
+
+const browserSession = new YspBrowserSession({ logger: log, onAccount: rememberLoginLink })
 const vipBridge = new VipMseBridge(browserSession, { logger: log })
 const browserLogin = new YspBrowserLogin(browserSession, {
   beforeOpen: async () => {
@@ -86,7 +124,73 @@ export const browserLoginFlow = {
     browserLogin.noteAccount({ authenticated: false, account: null })
     return statusSnapshot()
   },
+
+  /**
+   * 导入用户自己浏览器里的登录态（书签工具 / Cookie 头）。不需要桌面，远程后台也能调。
+   * 先解析再碰浏览器：内容不对时不会白起一次 Chromium。
+   */
+  async import(payload) {
+    if (browserLogin.active()) throw new Error('央视频正在进行登录关联，请等它完成或取消后再导入')
+    const cookies = parseImportedLoginState(payload)
+    await vipBridge.suspend()
+    let status
+    try {
+      vipBridge.lastActivity = Date.now()
+      status = await browserSession.importLoginCookies(cookies)
+    } finally {
+      await vipBridge.resume()
+    }
+    browserLogin.noteAccount(status)
+    if (!status.authenticated) {
+      throw new Error('官网没有认出这份登录态：可能已过期或不完整，请在央视频官网确认已登录后重新点击书签工具复制')
+    }
+    log(`已通过导入关联央视频账号：${status.account?.nickname || '已登录'}${status.account?.vip ? ' · VIP 有效' : ' · 未识别 VIP'}`)
+    return statusSnapshot()
+  },
 }
+
+let keepaliveTimer = null
+let keepaliveRunning = null
+
+/** 拉起后台会话读一次账号：SDK 会在 endtime 临近时自动续期；之后交给空闲回收关掉浏览器。 */
+export async function runLoginKeepalive({ force = false } = {}) {
+  if (keepaliveRunning) return keepaliveRunning
+  keepaliveRunning = (async () => {
+    if (!force && !existsSync(LOGIN_LINK_MARKER)) return { skipped: 'unlinked' }
+    if (browserLogin.active() || browserSession.visible) return { skipped: 'busy' }
+    try {
+      vipBridge.lastActivity = Date.now()
+      await browserSession.ensureBrowser({ visible: false })
+      const status = await browserSession.readAccount()
+      vipBridge.lastActivity = Date.now()
+      browserLogin.noteAccount(status)
+      if (status.authenticated) {
+        log(`登录态保活完成：${status.account?.nickname || '已登录'}${status.account?.vip ? ' · VIP 有效' : ''}`)
+      } else {
+        printYellow('[央视频] 登录态保活：官网未识别到账号，会员频道需要重新登录或导入登录态')
+      }
+      return status
+    } catch (error) {
+      printYellow(`[央视频] 登录态保活失败：${firstLine(error)}`)
+      return { error: firstLine(error) }
+    }
+  })().finally(() => { keepaliveRunning = null })
+  return keepaliveRunning
+}
+
+function scheduleLoginKeepalive() {
+  if (keepaliveTimer) return
+  // 首次延后一会儿再跑：让启动时的频道表生成先过去，别和它抢浏览器池
+  const first = setTimeout(() => {
+    runLoginKeepalive().catch(() => {})
+    keepaliveTimer = setInterval(() => runLoginKeepalive().catch(() => {}), LOGIN_KEEPALIVE_INTERVAL_MS)
+    keepaliveTimer.unref?.()
+  }, LOGIN_KEEPALIVE_INITIAL_DELAY_MS)
+  first.unref?.()
+  keepaliveTimer = first
+}
+
+if (existsSync(LOGIN_LINK_MARKER)) scheduleLoginKeepalive()
 
 function isTopLevelRef(path) {
   const ref = String(path || '').split('/').filter(Boolean).at(-1) || ''
@@ -193,6 +297,9 @@ let shuttingDown = null
 export function shutdown() {
   if (shuttingDown) return shuttingDown
   shuttingDown = (async () => {
+    clearTimeout(keepaliveTimer)
+    clearInterval(keepaliveTimer)
+    keepaliveTimer = null
     await browserLogin.cancel({ restore: false })
     await vipBridge.close()
     await browserSession.close()
@@ -201,4 +308,9 @@ export function shutdown() {
 }
 
 // 测试只读导出，不在业务层直接操纵这些对象。
-export const runtime = { browserSession, vipBridge, browserLogin }
+export const runtime = {
+  browserSession,
+  vipBridge,
+  browserLogin,
+  loginLink: { markerPath: LOGIN_LINK_MARKER, read: readLoginLink, remember: rememberLoginLink },
+}

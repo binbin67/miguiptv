@@ -192,10 +192,10 @@ function browserLoginModule(id, method) {
   return module
 }
 
-async function runBrowserLoginAction(id, method) {
+async function runBrowserLoginAction(id, method, ...args) {
   try {
     const module = browserLoginModule(id, method)
-    const state = await module.browserLoginFlow[method]()
+    const state = await module.browserLoginFlow[method](...args)
     return { success: true, data: safeBrowserLoginState(state) }
   } catch (error) {
     return fail(error)
@@ -207,6 +207,15 @@ export const getBrowserLoginStatusAPI = id => runBrowserLoginAction(id, 'status'
 export const checkBrowserLoginAPI = id => runBrowserLoginAction(id, 'check')
 export const cancelBrowserLoginAPI = id => runBrowserLoginAction(id, 'cancel')
 export const closeBrowserLoginAPI = id => runBrowserLoginAction(id, 'close')
+/**
+ * 导入用户在自己浏览器里拿到的登录态（Docker / NAS 没有桌面、弹不出登录窗时的路径）。
+ * 内容只透传给模块种进它自己的浏览器 profile，本层不解析、不落盘、不进 extractors.json。
+ */
+export const importBrowserLoginAPI = (id, payload) => {
+  if (typeof payload !== 'string' || !payload.trim()) return fail(new Error('请先粘贴登录态内容'))
+  if (payload.length > 64 * 1024) return fail(new Error('登录态内容过长'))
+  return runBrowserLoginAction(id, 'import', payload)
+}
 
 /** 单模块开关。 */
 export function setExtractorEnabledAPI(id, enabled) {

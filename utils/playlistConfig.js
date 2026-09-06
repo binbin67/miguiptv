@@ -33,7 +33,7 @@ const DEFAULT_PROFILE = { id: 'default', name: '默认' }
 export const DEFAULT_GROUP_ORDER = [
   '公告',
   '体育', '体育-昨天', '体育-今天', '体育-明天',
-  '央视', '央视频', '卫视', '亚太', '国际', '影视', '少儿', '教育', '娱乐时尚', '文旅',
+  '央视', '央视频', '卫视', '亚太', '国际', '影视', '少儿', '教育', '娱乐时尚', '文旅', 'iPanda',
   'B站', '虎牙', '斗鱼',
 ]
 
@@ -489,6 +489,13 @@ export function applyConfig(groups, config) {
         if (direct === -1 && name === '央视频') {
           const cctv = config.groupOrder.indexOf('央视')
           if (cctv !== -1) return cctv + 0.5
+        }
+        // iPanda 是后来新增的内容来源；旧配置没有记录它时跟在文旅后。
+        if (direct === -1 && name === 'iPanda') {
+          const culture = config.groupOrder.indexOf('文旅')
+          if (culture !== -1) return culture + 0.5
+          const documentary = config.groupOrder.indexOf('纪实')
+          if (documentary !== -1) return documentary + 0.5
         }
         return direct
       }

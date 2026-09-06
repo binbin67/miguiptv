@@ -17,8 +17,9 @@ import { proxyAwareFetch } from "./systemProxy.js";
  * 不跨主机、不跨端口、也没有超长查询串；分片请求回到本机后再由服务器取回 CDN 内容转发。
  * 代价是视频流经服务器（家庭 NAS 与电视同网，多花的是一段内网带宽，外网下行量不变）。
  *
- * 地址表：清单每次刷新都会重新登记（同一条 CDN 地址恒定映射到同一 key），带 TTL 与条数上限，
- * 避免直播长跑把内存吃满。
+ * 地址表：清单每次刷新都会重新登记（同一条 CDN 地址恒定映射到同一 key）；播放器继续请求
+ * 嵌套子清单或分片时也会续期。配合条数上限，既避免活跃播放被固定 TTL 截断，也防止直播
+ * 长跑把内存吃满。
  */
 
 /**
@@ -48,7 +49,7 @@ function markManifestResult(key, ok, now = Date.now()) {
   manifestFailUntil.set(key, now + MANIFEST_FAIL_COOLDOWN_MS)
 }
 
-const TTL_MS = 10 * 60 * 1000     // 分片地址带时效签名，10 分钟足够覆盖播放器的重试窗口
+const TTL_MS = 10 * 60 * 1000     // 滑动空闲 TTL：活跃请求续期，停播 10 分钟后回收
 const MAX_ENTRIES = 5000          // 一个直播频道 10 分钟约 100 条，这个上限够几十路同放，超出按最早登记淘汰
 
 const registry = new Map()        // key -> { url, pid, transform, upstreamHeaders, upstreamUrlTransform, expires }
@@ -107,10 +108,16 @@ function register(url, pid = '', transform, upstreamHeaders, upstreamUrlTransfor
 function lookup(key) {
   const entry = registry.get(key)
   if (!entry) return null
-  if (entry.expires <= Date.now()) {
+  const now = Date.now()
+  if (entry.expires <= now) {
     registry.delete(key)
     return null
   }
+  // master 里的子清单只在首次改写时登记，播放器随后会直接轮询该子清单；若 lookup 不续期，
+  // 正常播放也会在固定 10 分钟后变成 404。删后重插同时把活跃项移到 LRU 队尾。
+  entry.expires = now + TTL_MS
+  registry.delete(key)
+  registry.set(key, entry)
   const result = { url: entry.url, pid: entry.pid }
   if (entry.transform) result.transform = entry.transform
   if (entry.upstreamHeaders) result.upstreamHeaders = entry.upstreamHeaders

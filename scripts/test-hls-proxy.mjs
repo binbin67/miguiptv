@@ -80,6 +80,23 @@ check('同一上游地址登记结果稳定；非绝对地址原样保留', () =
   assert.equal(toProxyManifest('a-1.ts', '1').trim(), 'a-1.ts')   // 改写漏网的相对地址不该被弄坏
 })
 
+check('活跃子清单每次 lookup 都续期，停播超过十分钟才回收', () => {
+  const originalNow = Date.now
+  try {
+    let now = 1_000_000
+    Date.now = () => now
+    const key = register('http://cdn.example.com/live/active-child.m3u8', 'ipanda-chengdu')
+    now += 9 * 60 * 1000
+    assert.ok(lookup(key), '第一次轮询应续期')
+    now += 9 * 60 * 1000
+    assert.ok(lookup(key), '总时长超过十分钟但持续活跃时仍应有效')
+    now += 11 * 60 * 1000
+    assert.equal(lookup(key), null, '空闲超过十分钟后应回收')
+  } finally {
+    Date.now = originalNow
+  }
+})
+
 check('平台防盗链请求头随分片地址登记，不暴露到播放列表文本', () => {
   const url = 'http://cdn.example.com/live/protected.ts'
   const upstreamHeaders = { Origin: 'https://live.example.com', Referer: 'https://live.example.com/' }
@@ -430,15 +447,14 @@ await checkAsync('上游分片 4xx 原样透传状态码，pipeUpstream 报告�
 })
 
 // 放在所有会 lookup 既有 key 的用例之后：本用例灌入 5000+ 条登记，会把早前的测试 key 挤掉
-check('注册表超上限从最久未登记端淘汰：反复续期的活跃频道 key 不被误伤', () => {
+check('注册表超上限从最久未访问端淘汰：持续 lookup 的活跃频道 key 不被误伤', () => {
   const activeUrl = 'http://cdn.example.com/live/active-channel.ts'
   const active = register(activeUrl, 'evict-test')
   for (let i = 0; i < 5100; i++) {
     register(`http://cdn.example.com/live/bulk-${i}.ts`, 'evict-test')
-    // 直播清单每 6 秒一刷，活跃 key 会被反复重新登记
-    if (i % 500 === 0) register(activeUrl, 'evict-test')
+    // 嵌套媒体清单会由播放器直接轮询，不会经过顶层清单重新登记，只靠 lookup 保持活跃。
+    if (i % 500 === 0) assert.ok(lookup(active))
   }
-  register(activeUrl, 'evict-test')
   assert.ok(lookup(active), '活跃 key 不应先于一次性垃圾条目被淘汰')
 })
 

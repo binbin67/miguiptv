@@ -130,6 +130,7 @@ import livechina from './livechina/index.js'
 import mgtv from './mgtv/index.js'
 import migu from './migu/index.js'
 import njtv from './njtv/index.js'
+import nmtv from './nmtv/index.js'
 import qtv from './qtv/index.js'
 import songjiang from './songjiang/index.js'
 import sztv from './sztv/index.js'
@@ -170,6 +171,7 @@ const MODULES = [
   iqilu,
   sztv,
   njtv,
+  nmtv,
   qtv,
   kankanews,
   songjiang,

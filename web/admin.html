@@ -3423,6 +3423,20 @@
                     <div style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">先在官网完成登录，再打开开发者工具的 Network（网络），刷新页面并点开 <code>getUserInfo</code> 请求。在 Request Headers 中单击 <code>Cookie</code> 的值后按 ⌘C（Windows/Linux 按 Ctrl+C），不需要鼠标右键；粘贴到下方并保存。Cookie 失效时重新导入即可。</div>
                 </div>`;
             }
+            if (key === 'sichuan-token') {
+                const loggedIn = !!(secretsSet && secretsSet.accessToken);
+                return `<div class="bookmarklet-section" style="margin:0 0 12px;">
+                    <div class="bookmarklet-title">
+                        <span>🔑</span><span>四川广电登录态</span>
+                        <span class="login-state-badge ${loggedIn ? 'on' : 'off'}">${loggedIn ? '✅ 已配置 Token（启用 9 个频道）' : '未登录（频道暂不加入）'}</span>
+                    </div>
+                    <div class="bookmarklet-actions">
+                        <a id="sichuanBookmarklet" class="bookmarklet-link" draggable="true">获取四川 Token</a>
+                        <a href="https://www.sctv.com/channelLive" target="_blank" rel="noreferrer">打开四川官网 ↗</a>
+                    </div>
+                    <div style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">先在四川官网登录，然后把“获取四川 Token”拖到浏览器书签栏，在已登录的官网页面点击该书签。复制结果粘贴到下方并保存，再点“立即刷新”。兼容官网当前 <code>scgc_userAccountInfo</code> 和历史大小写写法。</div>
+                </div>`;
+            }
             return '';
         }
 
@@ -3680,6 +3694,7 @@
             // 助手随展开区一起重建，每次渲染后重新挂一次
             initMiguBookmarklet();
             initFengshowsBookmarklet();
+            initSichuanBookmarklet();
             // 记录本次渲染的初始值，保存时只提交用户改过的字段（见函数注释）
             captureExtractorInitialValues(m);
 
@@ -5955,6 +5970,21 @@ if(!entry)throw new Error('未找到 Token，请先登录凤凰秀');
 let token=decodeURIComponent(entry.slice('App.user.token='.length));
 if(token.startsWith('"'))token=JSON.parse(token);
 navigator.clipboard.writeText(token).then(()=>alert('Token 已复制，请粘贴到 IPTV 源管理 → 凤凰卫视 → Token 并保存。')).catch(()=>prompt('请复制 Token：',token));
+}catch(e){alert(e.message)}})()`;
+        }
+
+        function initSichuanBookmarklet() {
+            const link = document.getElementById('sichuanBookmarklet');
+            if (!link) return;
+            link.href = `javascript:(()=>{try{
+const host=location.hostname.toLowerCase();
+if(host!=='www.sctv.com'&&host!=='sctv.com')throw new Error('请在四川广电官网登录后使用');
+const stores=[localStorage,sessionStorage];let raw='';
+for(const store of stores){const key=Object.keys(store).find(k=>k.toLowerCase()==='scgc_useraccountinfo');if(key){raw=store.getItem(key)||'';if(raw)break;}}
+if(!raw)throw new Error('未找到四川登录信息，请先完成登录并刷新页面');
+const account=JSON.parse(raw);const token=account.access_token||account.data?.access_token||account.user?.access_token;
+if(!token)throw new Error('登录信息中没有 access_token，请重新登录');
+navigator.clipboard.writeText(token).then(()=>alert('四川 Token 已复制，请粘贴到 IPTV 源管理 → 四川并保存。')).catch(()=>prompt('请复制四川 Token：',token));
 }catch(e){alert(e.message)}})()`;
         }
 

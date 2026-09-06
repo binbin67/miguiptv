@@ -8,6 +8,7 @@ services:
     environment:
       - muserId=                                # 可选：咪咕账号ID（留空为游客模式）
       - mtoken=                                 # 可选：咪咕登录令牌（用于高画质/VIP）
+      # - mSichuanAccessToken=                  # 可选：四川广电官网登录令牌；也可在后台源管理中填写
       - mport=1905                              # 必须：容器监听端口，与 ports 对应
       - mhost=                                  # 可选：外部访问地址（如 http://192.168.1.100:1905）
       - mrateType=3                             # 画质：2=标清(480p)，3=高清(720p)，4=蓝光(1080p,需VIP)

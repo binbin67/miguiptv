@@ -623,7 +623,7 @@ check('深圳广电模块已注册，固定周期刷新且逐路径签名流必�
 
 check('省市广电模块卡片只显示地区名，不带平台品牌', () => {
   const expectedNames = {
-    beidou: '辽宁', chongqing: '重庆', cztv: '浙江', dalian: '大连', fjtv: '福建', gdtv: '广东', gxtv: '广西',
+    beidou: '辽宁', chongqing: '重庆', sichuan: '四川', cztv: '浙江', dalian: '大连', fjtv: '福建', gdtv: '广东', gxtv: '广西',
     gztv: '广州', hbtv: '湖北', hebtv: '河北', hnntv: '海南', hntv: '河南',
     iqilu: '山东', jstv: '江苏', kankanews: '上海', mgtv: '湖南', njtv: '南京',
     qtv: '青岛', sztv: '深圳',
@@ -763,15 +763,18 @@ try {
     const modules = manager.getState().modules
     const migu = modules.find(m => m.id === 'migu')
     const bili = modules.find(m => m.id === 'bilibili-live')
+    const sichuan = modules.find(m => m.id === 'sichuan')
     assert.equal(migu.helper, 'migu-bookmarklet')
     assert.equal(migu.helperSection, '', '没声明 helperSection 的渲染在表单最上面（咪咕就是）')
     assert.equal(bili.helper, 'bilibili-login', 'B 站的扫码登录助手')
     assert.equal(bili.helperSection, '登录态（选填）', '助手要挂在它自己那一段，不是表单最上面')
+    assert.equal(sichuan.helper, 'sichuan-token', '四川模块应提供官网登录态提取助手')
+    assert.equal(sichuan.helperSection, '四川官网登录', '四川助手应和 Token 输入框位于同一段')
   })
 
   check('模块分类透传给后台，未声明的模块默认归入免账号分类', () => {
     const modules = newManager().getState().modules
-    for (const id of ['migu', 'beijing', 'fengshows']) {
+    for (const id of ['migu', 'beijing', 'fengshows', 'sichuan']) {
       assert.equal(modules.find(module => module.id === id)?.category, 'account', `${id} 应归入账号与授权`)
     }
     for (const id of ['bilibili-live', 'huya-live', 'douyu-live']) {

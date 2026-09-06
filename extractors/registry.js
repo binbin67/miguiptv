@@ -117,6 +117,7 @@ import hbtv from './hbtv/index.js'
 import hnntv from './hnntv/index.js'
 import hntv from './hntv/index.js'
 import huyaLive from './huya-live/index.js'
+import jxntv from './jxntv/index.js'
 import jstv from './jstv/index.js'
 import iqilu from './iqilu/index.js'
 import kankanews from './kankanews/index.js'
@@ -152,6 +153,7 @@ const MODULES = [
   gztv,
   gxtv,
   fjtv,
+  jxntv,
   hebtv,
   hbtv,
   hnntv,

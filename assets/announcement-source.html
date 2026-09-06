@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>iPTV 系统公告视频源</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6fb;
+            --surface: #ffffff;
+            --surface-soft: #f8fafd;
+            --surface-strong: #eef2f8;
+            --line: #e2e8f0;
+            --text: #172033;
+            --text-secondary: #5f6b7c;
+            --muted: #8792a4;
+            --indigo: #4f63e9;
+            --indigo-soft: #eef1ff;
+            --cyan: #087e86;
+            --cyan-soft: #ecf9fa;
+            --violet: #6d47c7;
+            --violet-soft: #f4f0ff;
+            --pink: #c43d70;
+            --pink-soft: #fff0f6;
+            --danger: #bc3443;
+            --danger-soft: #fff0f1;
+            --display-size: 68px;
+            --heading-size: 56px;
+            --body-size: 28px;
+            --detail-size: 23px;
+            --meta-size: 19px;
+        }
+
+        * { box-sizing: border-box; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+            font-synthesis: none;
+            text-rendering: geometricPrecision;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .stage {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 12% 4%, rgba(79, 99, 233, .12), transparent 27%),
+                radial-gradient(circle at 91% 15%, rgba(8, 126, 134, .12), transparent 28%),
+                var(--bg);
+        }
+        .stage::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: .34;
+            background-image:
+                linear-gradient(rgba(203, 213, 225, .34) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(203, 213, 225, .34) 1px, transparent 1px);
+            background-size: 68px 68px;
+            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .58), transparent 72%);
+        }
+        .orb {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(2px);
+        }
+        .orb-a { width: 260px; height: 260px; right: 36px; top: 76px; background: rgba(109, 71, 199, .08); }
+        .orb-b { width: 190px; height: 190px; left: 18px; bottom: 30px; background: rgba(196, 61, 112, .07); }
+
+        .shell {
+            position: absolute;
+            inset: 66px 82px;
+            display: flex;
+            flex-direction: column;
+            padding: 48px 62px 40px;
+            overflow: hidden;
+            border: 1px solid rgba(203, 213, 225, .92);
+            border-radius: 44px;
+            background: rgba(255, 255, 255, .96);
+            box-shadow: 0 28px 78px rgba(31, 45, 78, .12);
+        }
+        .shell::after {
+            content: "";
+            position: absolute;
+            width: 440px;
+            height: 440px;
+            right: -180px;
+            bottom: -225px;
+            border-radius: 50%;
+            border: 78px solid var(--indigo-soft);
+            opacity: .72;
+        }
+
+        .topbar, .footer, .slide { position: relative; z-index: 1; }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 72px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+        .brand-mark {
+            display: grid;
+            place-items: center;
+            width: 68px;
+            height: 68px;
+            border-radius: 19px;
+            background: var(--indigo);
+            color: white;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: .06em;
+            box-shadow: 0 12px 26px rgba(79, 99, 233, .2);
+        }
+        .brand-copy { display: flex; flex-direction: column; line-height: 1.15; }
+        .brand-copy strong { font-size: 26px; font-weight: 720; letter-spacing: .01em; }
+        .brand-copy span { margin-top: 8px; color: var(--muted); font-size: var(--meta-size); }
+        .notice-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 50px;
+            padding: 0 22px;
+            border: 1px solid #bce7e9;
+            border-radius: 999px;
+            background: var(--cyan-soft);
+            color: var(--cyan);
+            font-size: 21px;
+            font-weight: 650;
+            letter-spacing: .02em;
+        }
+        .notice-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); }
+
+        .slide {
+            display: none;
+            flex: 1;
+            min-height: 0;
+            padding-top: 54px;
+        }
+        body[data-slide="0"] .slide-0,
+        body[data-slide="1"] .slide-1,
+        body[data-slide="2"] .slide-2 { display: flex; }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 11px;
+            color: var(--indigo);
+            font-size: var(--meta-size);
+            font-weight: 760;
+            letter-spacing: .13em;
+            text-transform: uppercase;
+        }
+        .eyebrow::before {
+            content: "";
+            width: 34px;
+            height: 4px;
+            border-radius: 99px;
+            background: currentColor;
+        }
+        h1, h2, p { margin: 0; }
+        h1 {
+            margin-top: 22px;
+            max-width: 1120px;
+            font-size: var(--display-size);
+            line-height: 1.16;
+            font-weight: 760;
+            letter-spacing: -.035em;
+        }
+        h2 {
+            margin-top: 22px;
+            font-size: var(--heading-size);
+            line-height: 1.2;
+            font-weight: 750;
+            letter-spacing: -.028em;
+        }
+        .lead {
+            margin-top: 24px;
+            color: var(--text-secondary);
+            font-size: var(--body-size);
+            line-height: 1.55;
+            font-weight: 450;
+        }
+
+        .welcome-layout {
+            width: 100%;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 570px;
+            align-items: center;
+            gap: 96px;
+            padding: 0 22px 24px;
+        }
+        .welcome-copy { align-self: center; }
+        .welcome-copy .lead { max-width: 930px; }
+        .feature-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 40px;
+        }
+        .feature-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 48px;
+            padding: 0 20px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: var(--surface-soft);
+            color: var(--text-secondary);
+            font-size: 21px;
+            font-weight: 620;
+        }
+        .feature-pill:nth-child(1) { color: var(--indigo); background: var(--indigo-soft); border-color: #cdd5ff; }
+        .feature-pill:nth-child(2) { color: var(--cyan); background: var(--cyan-soft); border-color: #bce7e9; }
+        .feature-pill:nth-child(3) { color: var(--violet); background: var(--violet-soft); border-color: #d8cbff; }
+        .feature-pill:nth-child(4) { color: var(--pink); background: var(--pink-soft); border-color: #f4c8d9; }
+
+        .dashboard-preview {
+            position: relative;
+            height: 500px;
+            padding: 28px;
+            border: 1px solid var(--line);
+            border-radius: 32px;
+            background: var(--surface-soft);
+        }
+        .preview-top {
+            display: grid;
+            grid-template-columns: 118px 1fr 70px;
+            gap: 12px;
+            height: 46px;
+            padding: 8px;
+            border: 1px solid var(--line);
+            border-radius: 13px;
+            background: var(--surface-strong);
+        }
+        .preview-top span { border-radius: 8px; background: white; }
+        .preview-top span:nth-child(2) { background: var(--indigo); }
+        .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 24px; }
+        .preview-card {
+            height: 168px;
+            padding: 22px;
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            background: white;
+        }
+        .preview-card .line { display: block; height: 13px; border-radius: 99px; background: var(--surface-strong); }
+        .preview-card .line:first-child { width: 62%; height: 18px; background: var(--text); opacity: .86; }
+        .preview-card .line:nth-child(2) { width: 88%; margin-top: 27px; }
+        .preview-card .line:nth-child(3) { width: 56%; margin-top: 13px; }
+        .preview-card .mini-button { display: block; width: 78px; height: 32px; margin-top: 22px; border-radius: 9px; }
+        .preview-card:nth-child(1) .mini-button { background: var(--cyan-soft); border: 1px solid #bce7e9; }
+        .preview-card:nth-child(2) .mini-button { background: var(--violet-soft); border: 1px solid #d8cbff; }
+        .preview-card:nth-child(3) .mini-button { background: var(--pink-soft); border: 1px solid #f4c8d9; }
+        .preview-card:nth-child(4) .mini-button { background: var(--indigo-soft); border: 1px solid #cdd5ff; }
+
+        .rules-layout {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 660px minmax(0, 1fr);
+            align-items: center;
+            gap: 92px;
+            padding: 0 22px 22px;
+        }
+        .rules-copy .lead { max-width: 640px; }
+        .rules-card {
+            padding: 32px;
+            border: 1px solid #f0c4c9;
+            border-radius: 28px;
+            background: linear-gradient(145deg, #fff 0%, var(--danger-soft) 100%);
+        }
+        .rules-title {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            color: var(--danger);
+            font-size: 30px;
+            font-weight: 760;
+        }
+        .rules-title .symbol {
+            display: grid;
+            place-items: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 13px;
+            background: var(--danger);
+            color: white;
+            font-size: 27px;
+            line-height: 1;
+        }
+        .rule-list { display: grid; gap: 16px; margin-top: 24px; }
+        .rule-item {
+            display: grid;
+            grid-template-columns: 54px 1fr;
+            align-items: center;
+            gap: 18px;
+            min-height: 92px;
+            padding: 15px 20px;
+            border: 1px solid rgba(226, 232, 240, .94);
+            border-radius: 17px;
+            background: rgba(255, 255, 255, .9);
+        }
+        .rule-number {
+            display: grid;
+            place-items: center;
+            width: 46px;
+            height: 46px;
+            border-radius: 13px;
+            background: var(--indigo-soft);
+            color: var(--indigo);
+            font-size: 19px;
+            font-weight: 760;
+        }
+        .rule-item:nth-child(2) .rule-number,
+        .rule-item:nth-child(3) .rule-number { color: var(--danger); background: var(--danger-soft); }
+        .rule-item p {
+            color: var(--text);
+            font-size: var(--detail-size);
+            line-height: 1.48;
+            font-weight: 620;
+        }
+
+        .copyright-layout {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 0 22px 20px;
+        }
+        .copyright-layout h2 { font-size: 62px; }
+        .copyright-layout h2 strong { color: var(--danger); font-weight: inherit; }
+        .copyright-layout > .lead { max-width: 1510px; }
+        .copyright-grid {
+            display: grid;
+            grid-template-columns: 1.15fr .85fr;
+            gap: 24px;
+            margin-top: 34px;
+        }
+        .info-card {
+            min-height: 214px;
+            padding: 29px 32px;
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            background: var(--surface-soft);
+        }
+        .info-card h3 { margin: 0; font-size: 25px; line-height: 1.25; font-weight: 740; }
+        .info-card p { margin-top: 16px; color: var(--text-secondary); font-size: var(--detail-size); line-height: 1.52; }
+        .prohibited { border-color: #f0c4c9; background: var(--danger-soft); }
+        .prohibited h3 { color: var(--danger); }
+        .rights { border-color: #bce7e9; background: var(--cyan-soft); }
+        .rights h3 { color: var(--cyan); }
+        .issue-link {
+            display: inline-flex;
+            margin-top: 18px;
+            padding: 10px 16px;
+            border: 1px solid #bce7e9;
+            border-radius: 11px;
+            background: white;
+            color: var(--cyan);
+            font-size: 21px;
+            font-weight: 680;
+        }
+        .scope-note {
+            margin-top: 22px;
+            color: var(--text-secondary);
+            font-size: 21px;
+            line-height: 1.5;
+        }
+        .scope-note strong { color: var(--text); }
+
+        .footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 42px;
+            padding-top: 26px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: var(--meta-size);
+        }
+        .timeline { display: flex; align-items: center; gap: 10px; }
+        .timeline span { width: 42px; height: 5px; border-radius: 99px; background: var(--line); }
+        body[data-slide="0"] .timeline span:nth-child(1),
+        body[data-slide="1"] .timeline span:nth-child(2),
+        body[data-slide="2"] .timeline span:nth-child(3) { width: 76px; background: var(--indigo); }
+
+        .logo-canvas {
+            position: relative;
+            display: none;
+            width: 512px;
+            height: 512px;
+            overflow: hidden;
+            padding: 46px;
+            background:
+                radial-gradient(circle at 88% 8%, rgba(8, 126, 134, .2), transparent 36%),
+                radial-gradient(circle at 6% 92%, rgba(109, 71, 199, .16), transparent 38%),
+                var(--bg);
+        }
+        .logo-card {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            padding: 42px;
+            border: 2px solid var(--line);
+            border-radius: 74px;
+            background: rgba(255, 255, 255, .97);
+            box-shadow: 0 22px 48px rgba(31, 45, 78, .13);
+        }
+        .logo-mark {
+            display: grid;
+            place-items: center;
+            width: 72px;
+            height: 72px;
+            border-radius: 21px;
+            background: var(--indigo);
+            color: white;
+            font-size: 23px;
+            font-weight: 800;
+            letter-spacing: .04em;
+        }
+        .logo-name { margin-top: 62px; color: var(--text); font-size: 94px; line-height: 1; font-weight: 770; letter-spacing: -.06em; }
+        .logo-label { margin-top: 25px; color: var(--cyan); font-size: 30px; line-height: 1; font-weight: 700; letter-spacing: .08em; }
+        .logo-accents { position: absolute; right: 41px; bottom: 43px; display: flex; gap: 10px; }
+        .logo-accents span { width: 11px; height: 11px; border-radius: 50%; }
+        .logo-accents span:nth-child(1) { background: var(--indigo); }
+        .logo-accents span:nth-child(2) { background: var(--cyan); }
+        .logo-accents span:nth-child(3) { background: var(--pink); }
+
+        body[data-mode="logo"] .stage { display: none; }
+        body[data-mode="logo"] .logo-canvas { display: block; }
+    </style>
+</head>
+<body data-slide="0">
+    <main class="stage">
+        <div class="orb orb-a"></div>
+        <div class="orb orb-b"></div>
+        <section class="shell">
+            <header class="topbar">
+                <div class="brand">
+                    <span class="brand-mark">TV</span>
+                    <span class="brand-copy">
+                        <strong>iPTV 管理台</strong>
+                        <span>频道管理控制台</span>
+                    </span>
+                </div>
+                <span class="notice-pill"><i class="notice-dot"></i>系统公告</span>
+            </header>
+
+            <section class="slide slide-0">
+                <div class="welcome-layout">
+                    <div class="welcome-copy">
+                        <span class="eyebrow">Welcome</span>
+                        <h1>欢迎使用 iPTV<br>for iFansClub.com</h1>
+                        <p class="lead">把分散的直播源，整理成一套真正属于你的频道系统。</p>
+                        <div class="feature-pills">
+                            <span class="feature-pill">自托管</span>
+                            <span class="feature-pill">模块化</span>
+                            <span class="feature-pill">可视化</span>
+                            <span class="feature-pill">NAS 友好</span>
+                        </div>
+                    </div>
+                    <div class="dashboard-preview" aria-hidden="true">
+                        <div class="preview-top"><span></span><span></span><span></span></div>
+                        <div class="preview-grid">
+                            <div class="preview-card"><span class="line"></span><span class="line"></span><span class="line"></span><span class="mini-button"></span></div>
+                            <div class="preview-card"><span class="line"></span><span class="line"></span><span class="line"></span><span class="mini-button"></span></div>
+                            <div class="preview-card"><span class="line"></span><span class="line"></span><span class="line"></span><span class="mini-button"></span></div>
+                            <div class="preview-card"><span class="line"></span><span class="line"></span><span class="line"></span><span class="mini-button"></span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="slide slide-1">
+                <div class="rules-layout">
+                    <div class="rules-copy">
+                        <span class="eyebrow">Authorized use only</span>
+                        <h2>仅使用你有权使用的内容</h2>
+                        <p class="lead">iPTV 是自托管的软件工具，不提供任何第三方节目版权许可。</p>
+                    </div>
+                    <div class="rules-card">
+                        <div class="rules-title"><span class="symbol">!</span>重要版权与合规提醒</div>
+                        <div class="rule-list">
+                            <div class="rule-item"><span class="rule-number">01</span><p>仅接入本人拥有、合法订阅或已获明确授权的内容</p></div>
+                            <div class="rule-item"><span class="rule-number">02</span><p>严禁售卖订阅、公开转播或传播未获授权的节目</p></div>
+                            <div class="rule-item"><span class="rule-number">03</span><p>严禁绕过付费或地域限制，也不要共享他人账号凭据</p></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="slide slide-2">
+                <div class="copyright-layout">
+                    <span class="eyebrow">Copyright notice</span>
+                    <h2>公开可访问 <strong>≠</strong> 已获版权授权</h2>
+                    <p class="lead">技术上可播放、可抓取或可代理，不代表内容可以复制、传播、转播或商业使用。</p>
+                    <div class="copyright-grid">
+                        <article class="info-card prohibited">
+                            <h3>禁止未授权传播与商业运营</h3>
+                            <p>请仅在个人学习、研究及已获得合法授权的范围内使用本项目。</p>
+                        </article>
+                        <article class="info-card rights">
+                            <h3>权利人下架与侵权通知</h3>
+                            <p>如认为相关条目侵权，请通过项目 GitHub Issue 联系处理。</p>
+                            <span class="issue-link">github.com/akiralereal/iptv/issues</span>
+                        </article>
+                    </div>
+                    <p class="scope-note"><strong>无法确认权利状态时：</strong>请关闭对应内容源，并优先使用自己的合法订阅或自有信号。</p>
+                </div>
+            </section>
+
+            <footer class="footer">
+                <span>iFansClub.com · github.com/akiralereal/iptv</span>
+                <span class="timeline"><span></span><span></span><span></span></span>
+            </footer>
+        </section>
+    </main>
+
+    <main class="logo-canvas">
+        <section class="logo-card">
+            <span class="logo-mark">TV</span>
+            <div class="logo-name">iPTV</div>
+            <div class="logo-label">系统公告</div>
+            <div class="logo-accents"><span></span><span></span><span></span></div>
+        </section>
+    </main>
+
+    <script>
+        const params = new URLSearchParams(location.search)
+        const mode = params.get('mode') === 'logo' ? 'logo' : 'video'
+        const slide = Math.max(0, Math.min(2, Number.parseInt(params.get('slide') || '0', 10) || 0))
+        document.body.dataset.mode = mode
+        document.body.dataset.slide = String(slide)
+    </script>
+</body>
+</html>

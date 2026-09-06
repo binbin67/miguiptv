@@ -8,20 +8,33 @@ import { applyConfig } from '../utils/playlistConfig.js'
 
 console.log('公告频道测试')
 
+assert.equal(ANNOUNCEMENT.name, '欢迎使用 iPTV for iFansClub.com')
 const m3u = announcementM3uEntry()
-assert.match(m3u, /group-title="公告",欢迎使用 iPTV/)
+assert.match(m3u, /group-title="公告",欢迎使用 iPTV for iFansClub\.com/)
 assert.ok(m3u.includes('${replace}/assets/announcement.mp4'))
 assert.ok(m3u.includes('${replace}/assets/announcement-logo.png'))
 
 const txt = announcementTxtEntry()
-assert.equal(txt, `公告,#genre#\n欢迎使用 iPTV,\${replace}/assets/announcement.mp4\n`)
+assert.equal(txt, `公告,#genre#\n欢迎使用 iPTV for iFansClub.com,\${replace}/assets/announcement.mp4\n`)
 
 const video = readAnnouncementAsset(ANNOUNCEMENT.videoPath)
 const logo = readAnnouncementAsset(ANNOUNCEMENT.logoPath)
 assert.equal(video?.contentType, 'video/mp4')
 assert.equal(video?.content.subarray(4, 8).toString('ascii'), 'ftyp')
+const videoBytes = video.content
+const moovOffset = videoBytes.indexOf(Buffer.from('moov'))
+const mdatOffset = videoBytes.indexOf(Buffer.from('mdat'))
+assert.ok(moovOffset > 0 && moovOffset < mdatOffset, '公告视频应启用 faststart')
+const tkhdOffset = videoBytes.indexOf(Buffer.from('tkhd')) - 4
+assert.ok(tkhdOffset >= 0, '公告视频应包含视频轨道')
+const tkhdVersion = videoBytes[tkhdOffset + 8]
+const dimensionsOffset = tkhdOffset + (tkhdVersion === 1 ? 96 : 84)
+assert.equal(videoBytes.readUInt32BE(dimensionsOffset) / 65536, 1920)
+assert.equal(videoBytes.readUInt32BE(dimensionsOffset + 4) / 65536, 1080)
 assert.equal(logo?.contentType, 'image/png')
 assert.deepEqual([...logo.content.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10])
+assert.equal(logo.content.readUInt32BE(16), 512)
+assert.equal(logo.content.readUInt32BE(20), 512)
 
 const protectedConfig = protectAnnouncementConfig({
   hiddenChannels: [ANNOUNCEMENT_CHANNEL_KEY, '央视::c1'],

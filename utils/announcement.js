@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 
 export const ANNOUNCEMENT = Object.freeze({
   group: '公告',
-  name: '欢迎使用 iPTV',
+  name: '欢迎使用 iPTV for iFansClub.com',
   tvgId: 'iptv-announcement',
   videoPath: '/assets/announcement.mp4',
   logoPath: '/assets/announcement-logo.png',

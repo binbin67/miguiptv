@@ -70,6 +70,17 @@ check('固定输出 63 个公开频道 + 10 个会员频道并统一进入央视
   assert.equal(getModule('yangshipin'), yangshipin)
 })
 
+check('模块只做直播：能力声明关闭回看，73 条频道逐条标 catchup none（issue #119）', () => {
+  // 订阅头全局 catchup="append" 会套到所有未声明的频道上；不逐条标 none，
+  // 播放器就会给央视频标出回看入口，点了却只能拿到直播。
+  assert.equal(yangshipin.capabilities.catchup, false)
+  const channels = buildChannels()
+  assert.equal(channels.length, 73)
+  assert.ok(channels.every(channel => channel.catchup === 'none'))
+  // 频道表字段变化要靠 catalogVersion 递增让存量磁盘缓存在启动时重建
+  assert.equal(yangshipin.catalogVersion, 3)
+})
+
 check('引用严格受频道白名单约束', () => {
   assert.equal(yangshipin.claimsRef('ysp-cctv1'), true)
   assert.equal(yangshipin.claimsRef('ysp-cctv18'), false)

@@ -8,10 +8,13 @@ export default {
   name: '央视频',
   description: '63 个公开频道匿名取流，另含 10 个需登录/VIP 的频道；会员流由官网播放器自动解扰为 H.264。',
   category: 'account',
-  capabilities: { cache: 'disk', resolve: true, epg: false },
+  // catchup: false —— 只做直播。官方接口虽有 playbacktime 时移，但按频道/时段受版权门控
+  //（CCTV13 全时段拒、CCTV1 部分时段拒），回看需求交给同台的咪咕源承担（issue #119）。
+  capabilities: { cache: 'disk', resolve: true, epg: false, catchup: false },
   // v2：在原有 63 个公开频道之外加入 10 个官网会员频道。递增后会让存量部署
   // 在启动生成播放列表前重建缓存，不必等待默认 24 小时刷新周期。
-  catalogVersion: 2,
+  // v3：频道表逐条标 catchup:'none'，收回订阅头全局回看声明对央视频的误导（issue #119）。
+  catalogVersion: 3,
   outputGroupName: '央视频',
   // 公开频道分片必须由播放器直连 CDN，不能经本机转发：实测同一路频道，全代理下本机去拉分片被
   // 平台回 403，而清单直出（分片直连）与纯 302 两种方式都能稳定播放。差别只在「谁去拉分片」——

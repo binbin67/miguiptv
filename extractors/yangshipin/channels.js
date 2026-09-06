@@ -106,17 +106,22 @@ export function claimsRef(ref) {
   return CHANNEL_BY_REF.has(key) || AUTH_CHANNEL_BY_REF.has(key)
 }
 
+// 每条都显式 catchup:'none'：订阅头的全局 catchup="append" 会套到所有没声明的频道上，
+// 播放器据此给央视频标出回看入口，点了却只能拿到直播（issue #119）。模块不做回看，
+// 回看交给同台的咪咕源；VIP 桥接频道由官网播放器解扰，更无时移可言。
 export function buildChannels() {
   const publicChannels = CHANNELS.map(channel => ({
     name: channel.name,
     deferredRef: `ysp-${channel.id}`,
     logo: '',
+    catchup: 'none',
   }))
   const vipChannels = AUTH_CHANNELS.map(channel => ({
     name: channel.name,
     deferredRef: `ysp-vip-${channel.id}`,
     logo: '',
     opts: ['network-caching=3000'],
+    catchup: 'none',
   }))
   return [...publicChannels, ...vipChannels]
 }

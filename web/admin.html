@@ -3355,6 +3355,19 @@
                     <div style="font-size:12px; color:#888; margin-top:6px;">用 B 站手机 App 扫一下即可，凭据直接存到服务端、不经过这个页面。下面的输入框留空即不修改已保存的凭据。</div>
                 </div>`;
             }
+            if (key === 'beijing-cookie') {
+                const loggedIn = !!(secretsSet && secretsSet.cookie);
+                return `<div class="bookmarklet-section" style="margin:0 0 12px;">
+                    <div class="bookmarklet-title">
+                        <span>🔑</span><span>北京时间登录态</span>
+                        <span class="login-state-badge ${loggedIn ? 'on' : 'off'}">${loggedIn ? '✅ 已导入 Cookie（启用 9 个电视台）' : '未登录（仍可看公开直播）'}</span>
+                    </div>
+                    <div class="bookmarklet-actions">
+                        <a href="https://www.btime.com/btv/btvsy_index" target="_blank" rel="noreferrer">打开北京时间官网 ↗</a>
+                    </div>
+                    <div style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">先在官网完成登录，再打开开发者工具的 Network（网络），刷新页面并点开 <code>getUserInfo</code> 请求。在 Request Headers 中单击 <code>Cookie</code> 的值后按 ⌘C（Windows/Linux 按 Ctrl+C），不需要鼠标右键；粘贴到下方并保存。Cookie 失效时重新导入即可。</div>
+                </div>`;
+            }
             return '';
         }
 

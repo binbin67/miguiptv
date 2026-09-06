@@ -88,6 +88,7 @@
 import bilibiliLive from './bilibili-live/index.js'
 import asianLive from './asian-live/index.js'
 import beidou from './beidou/index.js'
+import beijing from './beijing/index.js'
 import cztv from './cztv/index.js'
 import dalian from './dalian/index.js'
 import douyuLive from './douyu-live/index.js'
@@ -127,6 +128,7 @@ const MODULES = [
   huyaLive,
   douyuLive,
   beidou,
+  beijing,
   dalian,
   gdtv,
   gztv,

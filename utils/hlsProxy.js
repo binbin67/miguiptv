@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { printRed, printYellow } from "./colorOut.js";
+import { proxyAwareFetch } from "./systemProxy.js";
 
 /**
  * 全代理模式（issue #98 续）：清单里的地址全部改写成「本机同源相对地址」，分片由服务器转发。
@@ -207,7 +208,7 @@ async function fetchUpstreamResponse(raw, {
         if (['authorization', 'cookie', 'proxy-authorization'].includes(name.toLowerCase())) delete generatedHeaders[name]
       }
     }
-    const response = await fetch(target.href, {
+    const response = await proxyAwareFetch(target.href, {
       method,
       redirect: 'manual',
       signal,

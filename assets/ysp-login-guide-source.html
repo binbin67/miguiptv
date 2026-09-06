@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>iPTV 央视频会员登录教程视频源</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6fb;
+            --surface: #ffffff;
+            --surface-soft: #f8fafd;
+            --surface-strong: #eef2f8;
+            --line: #e2e8f0;
+            --text: #172033;
+            --text-secondary: #5f6b7c;
+            --muted: #8792a4;
+            --indigo: #4f63e9;
+            --indigo-soft: #eef1ff;
+            --cyan: #087e86;
+            --cyan-soft: #ecf9fa;
+            --violet: #6d47c7;
+            --violet-soft: #f4f0ff;
+            --pink: #c43d70;
+            --pink-soft: #fff0f6;
+            --green: #1f8a4c;
+            --green-soft: #eaf8ef;
+            --amber: #b86e00;
+            --amber-soft: #fff6e5;
+            --danger: #bc3443;
+            --danger-soft: #fff0f1;
+            --display-size: 66px;
+            --heading-size: 54px;
+            --body-size: 27px;
+            --detail-size: 22px;
+            --meta-size: 19px;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+            font-synthesis: none;
+            text-rendering: geometricPrecision;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .stage {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 12% 4%, rgba(79, 99, 233, .12), transparent 27%),
+                radial-gradient(circle at 91% 15%, rgba(8, 126, 134, .12), transparent 28%),
+                var(--bg);
+        }
+        .stage::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: .34;
+            background-image:
+                linear-gradient(rgba(203, 213, 225, .34) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(203, 213, 225, .34) 1px, transparent 1px);
+            background-size: 68px 68px;
+            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .58), transparent 72%);
+        }
+        .orb { position: absolute; border-radius: 999px; filter: blur(2px); }
+        .orb-a { width: 260px; height: 260px; right: 36px; top: 76px; background: rgba(109, 71, 199, .08); }
+        .orb-b { width: 190px; height: 190px; left: 18px; bottom: 30px; background: rgba(196, 61, 112, .07); }
+
+        .shell {
+            position: absolute;
+            inset: 66px 82px;
+            display: flex;
+            flex-direction: column;
+            padding: 48px 62px 40px;
+            overflow: hidden;
+            border: 1px solid rgba(203, 213, 225, .92);
+            border-radius: 44px;
+            background: rgba(255, 255, 255, .96);
+            box-shadow: 0 28px 78px rgba(31, 45, 78, .12);
+        }
+        .shell::after {
+            content: "";
+            position: absolute;
+            width: 440px;
+            height: 440px;
+            right: -180px;
+            bottom: -225px;
+            border-radius: 50%;
+            border: 78px solid var(--indigo-soft);
+            opacity: .72;
+        }
+
+        .topbar, .footer, .slide { position: relative; z-index: 1; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 72px; }
+        .brand { display: flex; align-items: center; gap: 18px; }
+        .brand-mark {
+            display: grid;
+            place-items: center;
+            width: 68px;
+            height: 68px;
+            border-radius: 19px;
+            background: var(--indigo);
+            color: white;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: .06em;
+            box-shadow: 0 12px 26px rgba(79, 99, 233, .2);
+        }
+        .brand-copy { display: flex; flex-direction: column; line-height: 1.15; }
+        .brand-copy strong { font-size: 26px; font-weight: 720; letter-spacing: .01em; }
+        .brand-copy span { margin-top: 8px; color: var(--muted); font-size: var(--meta-size); }
+        .notice-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 50px;
+            padding: 0 22px;
+            border: 1px solid #d8cbff;
+            border-radius: 999px;
+            background: var(--violet-soft);
+            color: var(--violet);
+            font-size: 21px;
+            font-weight: 650;
+            letter-spacing: .02em;
+        }
+        .notice-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--violet); }
+
+        .slide { display: none; flex: 1; min-height: 0; padding-top: 46px; }
+        body[data-slide="0"] .slide-0, body[data-slide="1"] .slide-1, body[data-slide="2"] .slide-2,
+        body[data-slide="3"] .slide-3, body[data-slide="4"] .slide-4, body[data-slide="5"] .slide-5 { display: flex; }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 11px;
+            color: var(--indigo);
+            font-size: var(--meta-size);
+            font-weight: 760;
+            letter-spacing: .13em;
+            text-transform: uppercase;
+        }
+        .eyebrow::before { content: ""; width: 34px; height: 4px; border-radius: 99px; background: currentColor; }
+        h1, h2, h3, p { margin: 0; }
+        h1 { margin-top: 22px; max-width: 1120px; font-size: var(--display-size); line-height: 1.16; font-weight: 760; letter-spacing: -.035em; }
+        h2 { margin-top: 20px; font-size: var(--heading-size); line-height: 1.2; font-weight: 750; letter-spacing: -.028em; }
+        .lead { margin-top: 22px; color: var(--text-secondary); font-size: var(--body-size); line-height: 1.55; font-weight: 450; }
+        .lead strong { color: var(--text); font-weight: 680; }
+
+        /* 两栏步骤版式：左文案、右示意 */
+        .step-layout {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 640px minmax(0, 1fr);
+            align-items: center;
+            gap: 72px;
+            padding: 0 22px 20px;
+        }
+        .step-copy .lead { max-width: 620px; }
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 6px;
+            color: var(--indigo);
+            font-size: 22px;
+            font-weight: 760;
+            letter-spacing: .04em;
+        }
+        .step-badge .num {
+            display: grid;
+            place-items: center;
+            width: 54px;
+            height: 54px;
+            border-radius: 16px;
+            background: var(--indigo);
+            color: white;
+            font-size: 26px;
+            font-weight: 800;
+        }
+        .tip {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            margin-top: 30px;
+            padding: 18px 22px;
+            border: 1px solid #f2dcb0;
+            border-radius: 18px;
+            background: var(--amber-soft);
+            color: var(--amber);
+            font-size: 21px;
+            line-height: 1.5;
+            font-weight: 560;
+        }
+        .tip .symbol { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--amber); color: white; font-size: 20px; font-weight: 800; }
+
+        /* 示意元素 */
+        .mock-stack { position: relative; display: flex; flex-direction: column; gap: 26px; }
+        .browser {
+            border: 1px solid var(--line);
+            border-radius: 26px;
+            background: var(--surface-soft);
+            overflow: hidden;
+            box-shadow: 0 18px 44px rgba(31, 45, 78, .08);
+        }
+        .browser-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            height: 66px;
+            padding: 0 22px;
+            background: var(--surface-strong);
+            border-bottom: 1px solid var(--line);
+        }
+        .browser-dots { display: flex; gap: 8px; }
+        .browser-dots span { width: 13px; height: 13px; border-radius: 50%; background: #d3d9e3; }
+        .browser-dots span:nth-child(1) { background: #f27d73; }
+        .browser-dots span:nth-child(2) { background: #f5c04c; }
+        .browser-dots span:nth-child(3) { background: #5ec26a; }
+        .address {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            height: 40px;
+            padding: 0 18px;
+            border-radius: 12px;
+            background: white;
+            color: var(--text-secondary);
+            font-size: 20px;
+            font-family: "SF Mono", Menlo, monospace;
+        }
+        .bookmark-bar {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            height: 58px;
+            padding: 0 22px;
+            background: white;
+            border-bottom: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 19px;
+        }
+        .bookmark-bar .bm { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 9px; }
+        .bookmark-bar .bm i { width: 16px; height: 16px; border-radius: 4px; background: #d3d9e3; }
+        .bookmark-bar .bm.hot { color: var(--indigo); background: var(--indigo-soft); border: 1px solid #cdd5ff; font-weight: 700; }
+        .bookmark-bar .bm.hot i { background: var(--indigo); }
+        .bookmark-bar .drop {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 14px;
+            border: 2px dashed #cdd5ff;
+            border-radius: 9px;
+            color: var(--indigo);
+            font-weight: 650;
+        }
+        .browser-body { padding: 26px 28px 30px; }
+
+        .card-mock {
+            padding: 24px 26px;
+            border: 1px solid #bce7e9;
+            border-radius: 22px;
+            background: var(--cyan-soft);
+        }
+        .card-mock .card-title { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 740; }
+        .card-mock .card-title .badge { margin-left: 8px; padding: 5px 12px; border-radius: 999px; background: var(--surface-strong); color: var(--muted); font-size: 16px; font-weight: 650; }
+        .card-mock .card-title .badge.on { background: var(--green-soft); color: var(--green); border: 1px solid #bfe6cd; }
+        .card-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+        .btn-mock { display: inline-flex; align-items: center; height: 44px; padding: 0 18px; border-radius: 11px; border: 1px solid var(--line); background: white; color: var(--text); font-size: 19px; font-weight: 640; }
+        .btn-mock.primary { background: var(--indigo); border-color: var(--indigo); color: white; }
+        .btn-mock.bookmarklet { background: var(--cyan); border-color: var(--cyan); color: white; box-shadow: 0 10px 22px rgba(8, 126, 134, .22); }
+        .btn-mock.link { border: none; background: none; color: var(--indigo); text-decoration: underline; padding: 0 6px; }
+        .textarea-mock {
+            margin-top: 16px;
+            padding: 14px 16px;
+            min-height: 78px;
+            border: 1px solid #ddd;
+            border-radius: 11px;
+            background: white;
+            color: var(--muted);
+            font-size: 18px;
+            font-family: "SF Mono", Menlo, monospace;
+            line-height: 1.45;
+            word-break: break-all;
+        }
+        .textarea-mock.filled { color: var(--text); border-color: var(--indigo); }
+        .textarea-mock.filled b { color: var(--indigo); font-weight: 760; }
+        .card-hint { margin-top: 12px; color: var(--muted); font-size: 17px; line-height: 1.5; }
+
+        .site-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 82px;
+            padding: 0 30px;
+            border-radius: 22px;
+            border: 1px solid var(--line);
+            background: white;
+        }
+        .site-logo { display: flex; align-items: center; gap: 12px; color: #d0342c; font-size: 28px; font-weight: 800; letter-spacing: .02em; }
+        .site-logo i { width: 38px; height: 38px; border-radius: 10px; background: #d0342c; }
+        .site-nav { display: flex; gap: 26px; color: var(--text-secondary); font-size: 20px; }
+        .site-user { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 650; }
+        .site-user .avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--violet), var(--pink)); }
+        .site-user .login-btn { padding: 8px 18px; border-radius: 999px; background: #d0342c; color: white; }
+        .dialog-mock {
+            width: 560px;
+            margin: 26px auto 0;
+            padding: 26px 30px 30px;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: white;
+            box-shadow: 0 18px 44px rgba(31, 45, 78, .1);
+        }
+        .dialog-tabs { display: flex; gap: 26px; font-size: 21px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+        .dialog-tabs .on { color: var(--text); font-weight: 720; border-bottom: 3px solid #d0342c; margin-bottom: -13px; padding-bottom: 12px; }
+        .field { display: flex; align-items: center; height: 50px; margin-top: 16px; padding: 0 16px; border: 1px solid var(--line); border-radius: 11px; color: var(--muted); font-size: 19px; }
+        .field.code { justify-content: space-between; }
+        .field .get-code { color: #d0342c; font-weight: 650; }
+        .dialog-submit { margin-top: 18px; height: 50px; border-radius: 11px; background: #d0342c; color: white; display: grid; place-items: center; font-size: 20px; font-weight: 700; }
+        .wechat-hint { margin-top: 14px; text-align: center; color: var(--muted); font-size: 18px; }
+
+        .alert-mock {
+            position: absolute;
+            left: 50%;
+            top: 62%;
+            transform: translate(-50%, -50%);
+            width: 640px;
+            padding: 26px 30px 24px;
+            border-radius: 18px;
+            background: white;
+            border: 1px solid var(--line);
+            box-shadow: 0 24px 60px rgba(31, 45, 78, .22);
+            z-index: 2;
+        }
+        .alert-mock .alert-host { color: var(--muted); font-size: 17px; }
+        .alert-mock .alert-text { margin-top: 10px; font-size: 22px; line-height: 1.5; font-weight: 620; }
+        .alert-mock .alert-ok { margin-top: 18px; margin-left: auto; width: 96px; height: 42px; border-radius: 10px; background: var(--indigo); color: white; display: grid; place-items: center; font-size: 19px; font-weight: 700; }
+        .dim { opacity: .55; }
+
+        .pointer {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: var(--pink);
+            color: white;
+            font-size: 19px;
+            font-weight: 720;
+            box-shadow: 0 12px 26px rgba(196, 61, 112, .3);
+            z-index: 3;
+        }
+        .pointer::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: white; }
+
+        /* 首尾页 */
+        .intro-layout {
+            width: 100%;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 600px;
+            align-items: center;
+            gap: 90px;
+            padding: 0 22px 24px;
+        }
+        .intro-copy .lead { max-width: 900px; }
+        .feature-pills { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+        .feature-pill { display: inline-flex; align-items: center; min-height: 48px; padding: 0 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-soft); color: var(--text-secondary); font-size: 21px; font-weight: 620; }
+        .feature-pill:nth-child(1) { color: var(--indigo); background: var(--indigo-soft); border-color: #cdd5ff; }
+        .feature-pill:nth-child(2) { color: var(--cyan); background: var(--cyan-soft); border-color: #bce7e9; }
+        .feature-pill:nth-child(3) { color: var(--violet); background: var(--violet-soft); border-color: #d8cbff; }
+        .feature-pill:nth-child(4) { color: var(--green); background: var(--green-soft); border-color: #bfe6cd; }
+        .overview { padding: 30px 32px; border: 1px solid var(--line); border-radius: 30px; background: var(--surface-soft); }
+        .overview h3 { font-size: 24px; font-weight: 740; color: var(--text-secondary); letter-spacing: .04em; }
+        .overview ol { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 14px; }
+        .overview li { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 16px; min-height: 84px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 18px; background: white; font-size: 23px; font-weight: 640; line-height: 1.4; }
+        .overview li span { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; background: var(--indigo-soft); color: var(--indigo); font-size: 20px; font-weight: 760; }
+        .overview li small { display: block; margin-top: 4px; color: var(--muted); font-size: 18px; font-weight: 500; }
+
+        .done-layout { width: 100%; display: flex; flex-direction: column; justify-content: center; padding: 0 22px 20px; }
+        .done-layout h2 strong { color: var(--green); font-weight: inherit; }
+        .done-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 34px; }
+        .info-card { min-height: 236px; padding: 28px 30px; border: 1px solid var(--line); border-radius: 24px; background: var(--surface-soft); }
+        .info-card .icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 15px; font-size: 26px; font-weight: 800; color: white; }
+        .info-card:nth-child(1) .icon { background: var(--indigo); }
+        .info-card:nth-child(2) .icon { background: var(--cyan); }
+        .info-card:nth-child(3) .icon { background: var(--pink); }
+        .info-card h3 { margin-top: 18px; font-size: 26px; line-height: 1.25; font-weight: 740; }
+        .info-card p { margin-top: 14px; color: var(--text-secondary); font-size: var(--detail-size); line-height: 1.5; }
+        .scope-note { margin-top: 26px; color: var(--text-secondary); font-size: 21px; line-height: 1.5; }
+        .scope-note strong { color: var(--text); }
+
+        .footer { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding-top: 26px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--meta-size); }
+        .timeline { display: flex; align-items: center; gap: 10px; }
+        .timeline span { width: 34px; height: 5px; border-radius: 99px; background: var(--line); }
+        body[data-slide="0"] .timeline span:nth-child(1), body[data-slide="1"] .timeline span:nth-child(2), body[data-slide="2"] .timeline span:nth-child(3),
+        body[data-slide="3"] .timeline span:nth-child(4), body[data-slide="4"] .timeline span:nth-child(5), body[data-slide="5"] .timeline span:nth-child(6) { width: 64px; background: var(--indigo); }
+
+        .logo-canvas {
+            position: relative;
+            display: none;
+            width: 512px;
+            height: 512px;
+            overflow: hidden;
+            padding: 46px;
+            background:
+                radial-gradient(circle at 88% 8%, rgba(109, 71, 199, .2), transparent 36%),
+                radial-gradient(circle at 6% 92%, rgba(8, 126, 134, .16), transparent 38%),
+                var(--bg);
+        }
+        .logo-card { position: relative; width: 100%; height: 100%; padding: 42px; border: 2px solid var(--line); border-radius: 74px; background: rgba(255, 255, 255, .97); box-shadow: 0 22px 48px rgba(31, 45, 78, .13); }
+        .logo-mark { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 21px; background: var(--indigo); color: white; font-size: 23px; font-weight: 800; letter-spacing: .04em; }
+        .logo-name { margin-top: 62px; color: var(--text); font-size: 94px; line-height: 1; font-weight: 770; letter-spacing: -.06em; }
+        .logo-label { margin-top: 25px; color: var(--violet); font-size: 30px; line-height: 1; font-weight: 700; letter-spacing: .08em; }
+        .logo-accents { position: absolute; right: 41px; bottom: 43px; display: flex; gap: 10px; }
+        .logo-accents span { width: 11px; height: 11px; border-radius: 50%; }
+        .logo-accents span:nth-child(1) { background: var(--indigo); }
+        .logo-accents span:nth-child(2) { background: var(--violet); }
+        .logo-accents span:nth-child(3) { background: var(--pink); }
+
+        body[data-mode="logo"] .stage { display: none; }
+        body[data-mode="logo"] .logo-canvas { display: block; }
+    </style>
+</head>
+<body data-slide="0">
+    <main class="stage">
+        <div class="orb orb-a"></div>
+        <div class="orb orb-b"></div>
+        <section class="shell">
+            <header class="topbar">
+                <div class="brand">
+                    <span class="brand-mark">TV</span>
+                    <span class="brand-copy">
+                        <strong>iPTV 管理台</strong>
+                        <span>频道管理控制台</span>
+                    </span>
+                </div>
+                <span class="notice-pill"><i class="notice-dot"></i>使用教程 · 央视频会员频道</span>
+            </header>
+
+            <!-- 0 开场 -->
+            <section class="slide slide-0">
+                <div class="intro-layout">
+                    <div class="intro-copy">
+                        <span class="eyebrow">Yangshipin VIP · How to</span>
+                        <h1>央视频会员频道<br>把登录态导入 iPTV</h1>
+                        <p class="lead">适用于 Docker / NAS 等没有桌面的部署：在<strong>自己电脑的浏览器</strong>登录一次央视频，把登录态交给服务端，10 个会员频道就能在电视上播。</p>
+                        <div class="feature-pills">
+                            <span class="feature-pill">不用输入密码</span>
+                            <span class="feature-pill">约两分钟</span>
+                            <span class="feature-pill">只做一次</span>
+                            <span class="feature-pill">服务端自动续期</span>
+                        </div>
+                    </div>
+                    <div class="overview" aria-hidden="true">
+                        <h3>四步完成</h3>
+                        <ol>
+                            <li><span>1</span><div>把书签工具拖到书签栏<small>iPTV 后台 → 源管理 → 央视频</small></div></li>
+                            <li><span>2</span><div>登录央视频官网<small>yangshipin.cn，手机验证码或微信</small></div></li>
+                            <li><span>3</span><div>在官网页面点击书签<small>登录态自动复制</small></div></li>
+                            <li><span>4</span><div>粘贴到 iPTV 后台导入<small>显示昵称与 VIP 即完成</small></div></li>
+                        </ol>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 1 拖书签 -->
+            <section class="slide slide-1">
+                <div class="step-layout">
+                    <div class="step-copy">
+                        <span class="step-badge"><span class="num">1</span>把书签工具拖到书签栏</span>
+                        <h2>打开 iPTV 后台<br>源管理 → 央视频</h2>
+                        <p class="lead">卡片里有一个<strong>「获取央视频登录态」</strong>按钮。按住它，拖到浏览器顶部的书签栏松开，它就成了一个书签。</p>
+                        <div class="tip"><span class="symbol">!</span><span>书签栏没显示？Chrome / Edge 按 ⌘⇧B（Windows 按 Ctrl+Shift+B）先把书签栏打开。</span></div>
+                    </div>
+                    <div class="mock-stack">
+                        <div class="browser">
+                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">http://你的NAS地址:1905/admin</span></div>
+                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="drop">松开放到这里 → 获取央视频登录态</span></div>
+                            <div class="browser-body">
+                                <div class="card-mock">
+                                    <div class="card-title">🔑 央视频账号 <span class="badge">未登录</span></div>
+                                    <div class="card-row"><span class="btn-mock primary">打开央视频官方登录窗口</span><span class="btn-mock">检查登录态</span></div>
+                                    <div class="card-row"><span class="btn-mock bookmarklet">获取央视频登录态</span><span class="btn-mock link">打开央视频官网 ↗</span></div>
+                                    <div class="textarea-mock">粘贴书签工具复制的登录态（以 YSP1. 开头）</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="pointer" style="left: 470px; bottom: 150px;">← 按住它，拖到上面的书签栏</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2 登录官网 -->
+            <section class="slide slide-2">
+                <div class="step-layout">
+                    <div class="step-copy">
+                        <span class="step-badge"><span class="num">2</span>登录央视频官网</span>
+                        <h2>在同一台电脑打开<br>yangshipin.cn</h2>
+                        <p class="lead">用<strong>手机号验证码</strong>或<strong>微信</strong>登录。右上角出现头像和昵称，就是登录成功。密码和验证码都只输在官网里，iPTV 不会看到。</p>
+                        <div class="tip"><span class="symbol">!</span><span>要用有会员权益的那个账号登录；登录后先别关这个页面。</span></div>
+                    </div>
+                    <div class="mock-stack">
+                        <div class="browser">
+                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">https://www.yangshipin.cn/tv/home</span></div>
+                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="bm hot"><i></i>获取央视频登录态</span></div>
+                            <div class="browser-body">
+                                <div class="site-header">
+                                    <span class="site-logo"><i></i>央视频</span>
+                                    <span class="site-nav"><span>首页</span><span>电视</span><span>体育</span><span>纪录片</span></span>
+                                    <span class="site-user"><span class="avatar"></span>你的昵称 · VIP</span>
+                                </div>
+                                <div class="dialog-mock">
+                                    <div class="dialog-tabs"><span class="on">手机号登录</span><span>微信登录</span></div>
+                                    <div class="field">+86 手机号</div>
+                                    <div class="field code"><span>短信验证码</span><span class="get-code">获取验证码</span></div>
+                                    <div class="dialog-submit">登录</div>
+                                    <div class="wechat-hint">也可以切到「微信登录」扫码</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="pointer" style="right: 60px; top: 238px;">↑ 登录成功会显示昵称</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3 点书签 -->
+            <section class="slide slide-3">
+                <div class="step-layout">
+                    <div class="step-copy">
+                        <span class="step-badge"><span class="num">3</span>在官网页面点击书签</span>
+                        <h2>留在已登录的官网页面<br>点一下书签栏里的它</h2>
+                        <p class="lead">看到<strong>「央视频登录态已复制」</strong>提示就成了。如果弹出的是一个带文字的输入框，把里面的内容全选复制即可。</p>
+                        <div class="tip"><span class="symbol">!</span><span>提示"没有检测到登录态"时，说明官网还没登录成功，刷新页面确认右上角有昵称后再点一次。</span></div>
+                    </div>
+                    <div class="mock-stack">
+                        <div class="browser">
+                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">https://www.yangshipin.cn/tv/home</span></div>
+                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="bm hot"><i></i>获取央视频登录态</span></div>
+                            <div class="browser-body dim">
+                                <div class="site-header">
+                                    <span class="site-logo"><i></i>央视频</span>
+                                    <span class="site-nav"><span>首页</span><span>电视</span><span>体育</span><span>纪录片</span></span>
+                                    <span class="site-user"><span class="avatar"></span>你的昵称 · VIP</span>
+                                </div>
+                                <div class="dialog-mock" style="visibility: hidden; min-height: 330px;"></div>
+                            </div>
+                            <div class="alert-mock">
+                                <div class="alert-host">www.yangshipin.cn 显示</div>
+                                <div class="alert-text">央视频登录态已复制，请粘贴到 IPTV 源管理 → 央视频 → 导入登录态。</div>
+                                <div class="alert-ok">确定</div>
+                            </div>
+                        </div>
+                        <span class="pointer" style="left: 236px; top: 108px;">↑ 点这里</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4 粘贴导入 -->
+            <section class="slide slide-4">
+                <div class="step-layout">
+                    <div class="step-copy">
+                        <span class="step-badge"><span class="num">4</span>粘贴到 iPTV 后台导入</span>
+                        <h2>回到央视频卡片<br>粘贴，点「导入登录态」</h2>
+                        <p class="lead">服务端会把这份登录态交给官网校验，<strong>十几秒</strong>后卡片显示你的昵称和 VIP 状态，10 个会员频道随即进入播放列表。</p>
+                        <div class="tip"><span class="symbol">!</span><span>提示"官网没有认出这份登录态"时，回到官网确认仍是登录状态，重新点一次书签再导入。</span></div>
+                    </div>
+                    <div class="mock-stack">
+                        <div class="browser">
+                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">http://你的NAS地址:1905/admin</span></div>
+                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="bm hot"><i></i>获取央视频登录态</span></div>
+                            <div class="browser-body">
+                                <div class="card-mock">
+                                    <div class="card-title">🔑 央视频账号 <span class="badge on">✅ 你的昵称 · VIP 有效</span></div>
+                                    <div class="card-row"><span class="btn-mock bookmarklet">获取央视频登录态</span><span class="btn-mock link">打开央视频官网 ↗</span></div>
+                                    <div class="textarea-mock filled"><b>YSP1.</b>eyJ2IjoxLCJhdCI6MTc4ODY5ODc5NDkyMywiaG9zdCI6Ind3dy55YW5nc2hpcGluLmNuIiwiY29va2llcyI6eyJ5c3Bfc3Ry…</div>
+                                    <div class="card-row"><span class="btn-mock primary">导入登录态</span><span class="card-hint" style="margin: 0;">正在让官网校验，约需十几秒…</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="pointer" style="right: 40px; bottom: 92px;">粘贴后点这里</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5 完成 -->
+            <section class="slide slide-5">
+                <div class="done-layout">
+                    <span class="eyebrow">All set</span>
+                    <h2><strong>完成</strong>，之后不用再管</h2>
+                    <p class="lead">登录态只保存在服务端央视频专用的浏览器里，不会写进配置文件或备份。</p>
+                    <div class="done-grid">
+                        <article class="info-card">
+                            <span class="icon">10</span>
+                            <h3>会员频道自动进入播放列表</h3>
+                            <p>和 63 个公开频道同在「央视频」分组，电视端重新加载一次播放列表即可看到。</p>
+                        </article>
+                        <article class="info-card">
+                            <span class="icon">6h</span>
+                            <h3>服务端每 6 小时自动续期</h3>
+                            <p>官网的登录令牌 48 小时一续，服务端会替你续，家里几天不看会员频道也不会掉线。</p>
+                        </article>
+                        <article class="info-card">
+                            <span class="icon">↻</span>
+                            <h3>提示未登录时，重做第 2～4 步</h3>
+                            <p>官网要求重新验证、账号退出或会员到期时，在官网重新登录后再导入一次即可。</p>
+                        </article>
+                    </div>
+                    <p class="scope-note"><strong>正常现象：</strong>导入后你自己电脑上的央视频官网可能被踢下线，那是同一份登录态被服务端接管了，不影响电视端。</p>
+                </div>
+            </section>
+
+            <footer class="footer">
+                <span>iFansClub.com · github.com/akiralereal/iptv</span>
+                <span class="timeline"><span></span><span></span><span></span><span></span><span></span><span></span></span>
+            </footer>
+        </section>
+    </main>
+
+    <main class="logo-canvas">
+        <section class="logo-card">
+            <span class="logo-mark">TV</span>
+            <div class="logo-name">iPTV</div>
+            <div class="logo-label">央视频登录教程</div>
+            <div class="logo-accents"><span></span><span></span><span></span></div>
+        </section>
+    </main>
+
+    <script>
+        const params = new URLSearchParams(location.search)
+        const mode = params.get('mode') === 'logo' ? 'logo' : 'video'
+        const slide = Math.max(0, Math.min(5, Number.parseInt(params.get('slide') || '0', 10) || 0))
+        document.body.dataset.mode = mode
+        document.body.dataset.slide = String(slide)
+    </script>
+</body>
+</html>

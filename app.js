@@ -33,7 +33,7 @@ import { readConfig, saveConfig, parseInterfaceTxt, validateGroupConfig, applyCo
 import { updateBuiltInSources, updateExternalSources, updateExtractors, externalSourceManager, builtInSourceManager } from "./utils/channelMerger.js";
 import { GITHUB_RAW_MIRRORS, isBuiltInSubscriptionSource } from "./utils/externalSources.js";
 import { startProbe, getProbeStatus, cancelProbe } from "./utils/sourceProbe.js";
-import { ANNOUNCEMENT, readAnnouncementAsset } from "./utils/announcement.js";
+import { SYSTEM_ASSET_PATHS, readAnnouncementAsset } from "./utils/announcement.js";
 
 // 全代理/兼容模式（issue #98）的服务端可观测性。上一版的日志设计在实战里分不清三种情况
 // （首行不带分片数、每 pid 每分钟一行会让 curl 与播放器互吞对方的行、分片 404 与上游失败全静默），
@@ -935,7 +935,7 @@ async function handleRequest(req, res) {
   // 再按字节分段读取 MP4 的播放器；路由放在鉴权之后，密码和用户令牌不会被绕过。
   // 兼容历史的 /<咪咕userId>/<token>/m3u 地址：该入口会把两段账号前缀带进
   // 播放列表里的本机 URL，所以这里也接受以资源路径结尾的形式。
-  const announcementAssetPath = [ANNOUNCEMENT.videoPath, ANNOUNCEMENT.logoPath]
+  const announcementAssetPath = SYSTEM_ASSET_PATHS
     .find(assetPath => routePath === assetPath || routePath.endsWith(assetPath))
   if (announcementAssetPath) {
     if (method !== 'GET' && method !== 'HEAD') {

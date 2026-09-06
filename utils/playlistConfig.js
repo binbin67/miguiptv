@@ -8,7 +8,7 @@ import { getCanonicalMap, normalizeKey, normalizeTvgName, getPlaybackChannelIds 
 import { matchKeywordGroup } from "./groupRulesAPI.js"
 import { matchSourceFallbackGroup } from "./sourceGroupFallback.js"
 import { collectOptsUntilUrl, renderOpts, needsOpts } from "./channelOpts.js"
-import { ANNOUNCEMENT, isAnnouncementChannel, protectAnnouncementConfig } from "./announcement.js"
+import { ANNOUNCEMENT, isAnnouncementChannel, protectAnnouncementConfig, systemChannelByUrl } from "./announcement.js"
 
 // 台标来源分类（供后台展示）：本地上传 / 源自带 / 公共库兜底 / 无。
 // 依据 interface 里写出的 tvg-logo 形态判定，不联网、零额外成本。issue #38 / #40
@@ -117,7 +117,8 @@ const DEFAULT_CONFIG = {
 }
 
 function buildChannelId({ groupName, channelName, tvgName, url }) {
-  if (url === `\${replace}${ANNOUNCEMENT.videoPath}`) return ANNOUNCEMENT.tvgId
+  const system = systemChannelByUrl(url)
+  if (system) return system.tvgId
   if (!url) {
     return createHash('sha1')
       .update(`${groupName}\n${channelName}\n${tvgName || ''}`)

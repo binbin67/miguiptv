@@ -86,12 +86,12 @@ check('空输入 / 空分组不炸', () => {
   assert.deepEqual(dedupeAcrossGroups([{ name: '体育', dataList: [] }]), [])
 })
 
-check('咪咕地方组只保留指定独有频道，并归入上海 / 陕西 / 江苏', () => {
+check('咪咕地方组只保留指定独有频道，并归入陕西 / 江苏', () => {
   const local = {
     name: '地方',
     dataList: [
       { pID: '1', name: '上海新闻综合' },          // 上海官方模块已有：丢弃
-      { pID: '2', name: '上视东方影视' },          // 上海官方模块没有：保留
+      { pID: '2', name: '上视东方影视' },          // 播放不了：剔除
       { pID: '3', name: '南京新闻综合频道' },      // 南京官方模块已有：丢弃
       { pID: '4', name: '盐城新闻综合' },          // 江苏地市频道：丢弃
       { pID: '5', name: '陕西银龄频道' },          // 陕西：保留
@@ -103,10 +103,9 @@ check('咪咕地方组只保留指定独有频道，并归入上海 / 陕西 / �
     ],
   }
   const out = redistributeMiguLocalChannels([g('体育', 100), local, g('影视', 200)])
-  assert.deepEqual(out.map(group => group.name), ['体育', '上海', '陕西', '江苏', '影视'])
+  assert.deepEqual(out.map(group => group.name), ['体育', '陕西', '江苏', '影视'])
   assert.deepEqual(shape(out), [
     ['体育', ['100']],
-    ['上海', ['2']],
     ['陕西', ['5', '6', '7', '8']],
     ['江苏', ['9']],
     ['影视', ['200']],
@@ -133,6 +132,29 @@ check('咪咕新闻频道全部剔除，去掉空的新闻分组', () => {
     ],
   }
   assert.deepEqual(redistributeMiguLocalChannels([news]), [])
+})
+
+check('上视东方影视无论出现在哪个分类都剔除（播放不了）', () => {
+  const input = [
+    { name: '影视', dataList: [{ pID: '1', name: '上视东方影视' }, { pID: '2', name: '南方影视' }] },
+    { name: '地方', dataList: [{ pID: '1', name: '上视东方影视' }] },
+  ]
+  assert.deepEqual(shape(redistributeMiguLocalChannels(input)), [['影视', ['2']]])
+})
+
+check('咪咕熊猫分组整组移除（iPanda 官方模块已覆盖）', () => {
+  const input = [
+    g('央视', 1),
+    { name: '熊猫', dataList: [
+      { pID: '2', name: '熊猫频道01高清' },
+      { pID: '3', name: '熊猫频道1' },
+    ] },
+    g('少儿', 4),
+  ]
+  assert.deepEqual(shape(redistributeMiguLocalChannels(input)), [
+    ['央视', ['1']],
+    ['少儿', ['4']],
+  ])
 })
 
 check('咪咕综艺分组整组移除', () => {
@@ -169,12 +191,12 @@ check('文旅精简会剔除专题轮播和已有地方官方源的副本', () =
 
 check('重分组会合并已有地区组，且不修改输入', () => {
   const input = [
-    { name: '上海', dataList: [{ pID: '1', name: '旧频道' }] },
-    { name: '地方', dataList: [{ pID: '2', name: '上视东方影视' }] },
+    { name: '陕西', dataList: [{ pID: '1', name: '旧频道' }] },
+    { name: '地方', dataList: [{ pID: '2', name: '陕西银龄频道' }] },
   ]
   const before = JSON.stringify(input)
   const out = redistributeMiguLocalChannels(input)
-  assert.deepEqual(shape(out), [['上海', ['1', '2']]])
+  assert.deepEqual(shape(out), [['陕西', ['1', '2']]])
   assert.equal(JSON.stringify(input), before)
 })
 

@@ -30,10 +30,13 @@ const DEFAULT_PROFILE = { id: 'default', name: '默认' }
 
 // 新建配置档的默认分组顺序。用户在后台手动拖拽后会写入
 // groupOrder，下方 applyConfig 仍以用户顺序为最终优先级。
+// 「央视频」紧跟公告置顶：央视全套与主要卫视它匿名就是 1080p，同台的咪咕
+// 游客只到 540p、1080p 要 VIP，播放器按名聚合成「源1 / 源2」时应先走这份。
 export const DEFAULT_GROUP_ORDER = [
   '公告',
+  '央视频',
   '体育', '体育-昨天', '体育-今天', '体育-明天',
-  '央视', '央视频', '卫视', '亚太', '国际', '影视', '少儿', '教育', '娱乐时尚', '文旅', 'iPanda',
+  '央视', '卫视', '亚太', '国际', '影视', '少儿', '教育', '娱乐时尚', '文旅', 'iPanda',
   'B站', '虎牙', '斗鱼',
 ]
 
@@ -50,8 +53,9 @@ const LOCAL_GROUP_NAMES = new Set([
   '沈阳', '南京', '青岛', '广州', '深圳', '福州', '厦门',
 ])
 
+// 景观 / 慢直播类分组：央视景观、北京景观、上海景观…以及吉林广电的「吉林风景」。
 function isScenicGroup(name) {
-  return String(name || '').includes('景观')
+  return /景观|风景/.test(String(name || ''))
 }
 
 export function isLocalGroup(name) {
@@ -62,7 +66,9 @@ export function isLocalGroup(name) {
 }
 
 /**
- * 默认分组编排：内容类精确顺序 → 地方台连续区块 → 其他 → 景观。
+ * 默认分组编排：内容类精确顺序 → 其他 → 景观慢直播 → 地方台连续区块置底。
+ * 地方台组数最多（二三十个省市），压在最后才不会把内容类挤出播放器首屏；
+ * 景观贴在地方台上方，作为「电视频道」与「地方台」之间的分隔带。
  * 同一区块内保持来源原始顺序，避免每次刷新时频道乱跳。
  */
 export function sortGroupsByDefault(groups) {
@@ -74,8 +80,8 @@ export function sortGroupsByDefault(groups) {
       const nameB = b.group?.name || ''
       const exactA = priority.get(nameA)
       const exactB = priority.get(nameB)
-      const bucketA = exactA !== undefined ? 0 : isScenicGroup(nameA) ? 3 : isLocalGroup(nameA) ? 1 : 2
-      const bucketB = exactB !== undefined ? 0 : isScenicGroup(nameB) ? 3 : isLocalGroup(nameB) ? 1 : 2
+      const bucketA = exactA !== undefined ? 0 : isScenicGroup(nameA) ? 2 : isLocalGroup(nameA) ? 3 : 1
+      const bucketB = exactB !== undefined ? 0 : isScenicGroup(nameB) ? 2 : isLocalGroup(nameB) ? 3 : 1
       if (bucketA !== bucketB) return bucketA - bucketB
       if (bucketA === 0 && exactA !== exactB) return exactA - exactB
       return a.originalIndex - b.originalIndex
@@ -484,12 +490,11 @@ export function applyConfig(groups, config) {
         const direct = config.groupOrder.indexOf(name)
         // 「纪实」已更名为「文旅」；旧配置档不需重新拖拽也能沿用原位置。
         if (direct === -1 && name === '文旅') return config.groupOrder.indexOf('纪实')
-        // 「央视频」是后来新增的系统来源。旧配置档尚未记录它时，自动插在央视后、
-        // 下一已排序分组前；一旦用户显式拖拽保存，direct 会优先尊重用户位置。
-        if (direct === -1 && name === '央视频') {
-          const cctv = config.groupOrder.indexOf('央视')
-          if (cctv !== -1) return cctv + 0.5
-        }
+        // 「央视频」是后来新增的系统来源，且已升为央视 / 卫视的首选源（匿名 1080p，
+        // 见 DEFAULT_GROUP_ORDER）。旧配置档尚未记录它时直接置顶（公告仍由下方固定在首位）；
+        // 一旦用户显式拖拽保存，direct 会优先尊重用户位置。
+        // 返回负数但**不是 -1**：-1 在下面的比较里表示「不在列表中」。
+        if (direct === -1 && name === '央视频') return -0.5
         // iPanda 是后来新增的内容来源；旧配置没有记录它时跟在文旅后。
         if (direct === -1 && name === 'iPanda') {
           const culture = config.groupOrder.indexOf('文旅')

@@ -89,8 +89,8 @@ export function dedupeAcrossGroups(groups) {
 // 受账号/VIP 限制。最终播放列表不再输出「地方」，只保留官方模块
 // 尚未覆盖且用户明确要保留的频道，并直接并入对应地区。精确白名单刻意
 // 不自动接纳咪咕后续新增的地方频道，避免重复项刷新后悄悄复活。
+// 「上视东方影视」曾在此列并入上海，实测播放不了，已移到下方剔除名单。
 export const MIGU_LOCAL_REASSIGNMENTS = Object.freeze({
-  '上视东方影视': '上海',
   '陕西银龄频道': '陕西',
   '陕西都市青春频道': '陕西',
   '陕西秦腔频道': '陕西',
@@ -101,6 +101,8 @@ export const MIGU_LOCAL_REASSIGNMENTS = Object.freeze({
 // 这些地方频道还会出现在「新闻」等分类里，因此需要在
 // 所有咪咕分类中全局剔除，避免删掉「地方」组后又从别组复活。
 export const MIGU_CHANNEL_EXCLUSIONS = new Set([
+  // 咪咕这路取不到流、播不了；全局剔除，免得换个分类又冒出来
+  '上视东方影视',
   '中国天气',
   '公共新闻频道',
   '新动力量创一流',
@@ -132,7 +134,8 @@ export function redistributeMiguLocalChannels(groups) {
   for (const group of Array.isArray(groups) ? groups : []) {
     // 咪咕「综艺」只有一条专题轮播和一条已由江苏官方模块
     // 提供的重复频道，单独保留该分组意义不大，整组不输出。
-    if (group?.name === '综艺') continue
+    // 「熊猫」11 路已由 iPanda 官方模块免登录提供，咪咕这份是画质更差的重复，整组不输出。
+    if (group?.name === '综艺' || group?.name === '熊猫') continue
     const channels = (Array.isArray(group?.dataList) ? group.dataList : [])
       .filter(channel => !MIGU_CHANNEL_EXCLUSIONS.has(String(channel?.name || '').trim()))
     if (group?.name !== '地方') {

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 
 /**
  * 系统频道：项目自带、随订阅分发的短片，统一放在「公告」分组、固定在订阅首位。
- * 第一条是使用公告（含版权提示），第二条是央视频会员频道的登录教程——书签导入
+ * 第一条是使用公告（含版权提示），第二条是央视频会员频道的登录教程——复制 Cookie 导入
  * 那套操作光靠文字说不清，电视上放一遍比 README 管用（issue #119 后续）。
  * 都可以按档隐藏，但不能删除、移动、改名、改序；短片由 assets/*-source.html 经
  * scripts/generate-announcement-video.mjs 生成。
@@ -21,7 +21,7 @@ export const YSP_LOGIN_GUIDE = Object.freeze({
   tvgId: 'iptv-ysp-login-guide',
   videoPath: '/assets/ysp-login-guide.mp4',
   logoPath: '/assets/ysp-login-guide-logo.png',
-  description: '演示如何用书签工具把央视频登录态导入 iPTV 的教程短片',
+  description: '演示如何从浏览器复制 Cookie 把央视频登录态导入 iPTV 的教程短片',
 })
 export const SYSTEM_CHANNELS = Object.freeze([ANNOUNCEMENT, YSP_LOGIN_GUIDE])
 export const systemChannelKey = channel => `${channel.group}::${channel.tvgId}`

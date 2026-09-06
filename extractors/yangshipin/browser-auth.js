@@ -24,12 +24,15 @@ export function browserLoginAvailability({ platform = process.platform, env = pr
 }
 
 /**
- * 官网登录 SDK 用 js-cookie 把登录材料写在 yangshipin.cn 域下（都不是 HttpOnly），其中
- * 刷新令牌一组 48 小时有效、ysp_openid 84 分钟、vusession 一天；SDK 的 isSigned() 只看
- * endtime 判断要不要拿刷新令牌换新一套。这里列的是「有它才算带着登录态」的身份 cookie。
+ * 央视频网页登录态分两层（2026-09 用真实账号实测）：
+ * - 官网 SDK 用 js-cookie 写的 ysp_str* 令牌、endtime 等，document.cookie 看得到；
+ * - 账号服务用 Set-Cookie 下发的 vusession / accesstoken / refreshtoken / openid / appid / yspappid，
+ *   全是 HttpOnly。用户信息接口靠它们认人，续期接口没有它们直接回「inner token失效」并让 SDK 清空令牌。
+ * 所以书签工具那种只读 document.cookie 的路子在这里走不通，必须导入浏览器发出去的整段 Cookie 请求头
+ * （开发者工具 Network 里复制），它同时包含两层。
  */
-export const LOGIN_IDENTITY_COOKIES = Object.freeze(['ysp_strRefreshtoken', 'vusession', 'ysp_openid', 'yspopenid'])
-export const IMPORT_PREFIX = 'YSP1.'
+export const SESSION_COOKIES = Object.freeze(['vusession', 'accesstoken', 'refreshtoken', 'openid', 'appid', 'yspappid'])
+export const LOGIN_IDENTITY_COOKIES = Object.freeze(['vusession', 'accesstoken', 'refreshtoken'])
 const IMPORT_COOKIE_TTL_S = 48 * 3600
 const MAX_IMPORT_COOKIES = 120
 const COOKIE_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/
@@ -47,24 +50,20 @@ function cookiesFromHeader(text) {
 }
 
 /**
- * 解析后台粘贴进来的登录态。三种形态都收：
- * - 书签工具产出的 `YSP1.<base64 JSON>`（首选，带来源主机与时间）；
- * - 直接粘 JSON（{ cookies: {...} } 或裸 {name: value}）；
- * - 从开发者工具复制的整段 Cookie 请求头（a=b; c=d）。
+ * 解析后台粘贴进来的登录态。收两种形态：
+ * - 从开发者工具复制的整段 Cookie 请求头（a=b; c=d），这是唯一能带上 HttpOnly 会话 cookie 的来源；
+ * - JSON（{ cookies: {...} } 或裸 {name: value}），给脚本化导入用。
  * 只做形态与名字合法性校验，不猜每个 cookie 的含义——SDK 自己会用它认得的那些。
- * 返回 [{ name, value }]；没有任何身份 cookie 时抛错，避免把一堆统计 cookie 当登录态种进去。
+ * 返回 [{ name, value }]；缺 vusession / accesstoken / refreshtoken 时直接抛错说明原因，
+ * 免得白起一次 Chromium 再被官网拒绝。
  */
 export function parseImportedLoginState(payload) {
   let text = String(payload ?? '').trim()
-  if (!text) throw new Error('请先粘贴书签工具复制的央视频登录态')
-  if (text.length > 64 * 1024) throw new Error('登录态内容过长，不像是书签工具的输出')
+  if (!text) throw new Error('请先粘贴从浏览器开发者工具复制的 Cookie 值')
+  if (text.length > 64 * 1024) throw new Error('内容过长，不像是一段 Cookie 请求头')
+  if (/^cookie:\s*/i.test(text)) text = text.replace(/^cookie:\s*/i, '')
   let cookies
-  if (text.startsWith(IMPORT_PREFIX)) {
-    let decoded
-    try { decoded = JSON.parse(Buffer.from(text.slice(IMPORT_PREFIX.length), 'base64').toString('utf8')) }
-    catch { throw new Error('登录态内容无法解析，请重新点击书签工具复制完整内容') }
-    cookies = decoded?.cookies
-  } else if (text.startsWith('{')) {
+  if (text.startsWith('{')) {
     let decoded
     try { decoded = JSON.parse(text) } catch { throw new Error('登录态 JSON 无法解析') }
     cookies = decoded?.cookies && typeof decoded.cookies === 'object' ? decoded.cookies : decoded
@@ -79,10 +78,14 @@ export function parseImportedLoginState(payload) {
     const value = String(rawValue ?? '').trim()
     if (!value || value.length > 4096 || /[;\r\n\u0000-\u001f]/.test(value)) continue
     list.push({ name, value })
-    if (list.length > MAX_IMPORT_COOKIES) throw new Error('登录态里的 cookie 数量异常，请只在央视频官网页面使用书签工具')
+    if (list.length > MAX_IMPORT_COOKIES) throw new Error('cookie 数量异常，请只复制央视频官网请求的 Cookie 值')
   }
+  if (!list.length) throw new Error('内容里没有 cookie；请在开发者工具 Network 里点开一个 yangshipin.cn 的请求，复制 Request Headers 中 Cookie 的完整值')
   if (!list.some(cookie => LOGIN_IDENTITY_COOKIES.includes(cookie.name))) {
-    throw new Error('内容里没有央视频登录 cookie；请先在官网右上角完成登录，再在同一页面点击书签工具')
+    const hint = list.some(cookie => /^ysp_/.test(cookie.name))
+      ? '这份内容只有网页脚本能看到的那部分 cookie，缺少 vusession / accesstoken 这类 HttpOnly 会话 cookie，官网不会认。'
+      : '内容里没有 vusession / accesstoken 这类央视频会话 cookie。'
+    throw new Error(`${hint}请先在官网右上角确认已登录，再在开发者工具 Network 里点开任一 yangshipin.cn 请求，复制 Request Headers 中 Cookie 的完整值`)
   }
   return list
 }
@@ -270,13 +273,49 @@ export class YspBrowserSession {
         path: '/',
         expires,
         secure: false,
-        httpOnly: false,
+        // 会话层 cookie 在官网本来就是 HttpOnly；按原样标记，页面脚本读不到、行为和真登录一致
+        httpOnly: SESSION_COOKIES.includes(cookie.name),
       })))
       this.account = null
       this.logger(`已导入 ${cookies.length} 个央视频登录 cookie，正在让官网 SDK 校验`)
-      await page.goto(YSP_HOME, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-      await this.ensureHome()
-      return this.readAccount()
+      // 记下官网账号接口的每次回应：导入失败时要能说清是哪一步被拒（刷新令牌作废 / 用户信息接口不认 / SDK 清掉了 cookie），
+      // 而不是一句「没认出」。只记路径、HTTP 状态和返回码，不记正文里的令牌。
+      const apiLog = []
+      const onResponse = async response => {
+        const url = response.url()
+        if (!/\.yangshipin\.cn\/(?:v1\/|auth_|third\/)/.test(url)) return
+        let summary = ''
+        try {
+          const json = await response.json()
+          summary = `code=${json?.code ?? '-'} data.code=${json?.data?.code ?? '-'}${json?.msg || json?.message || json?.data?.msg ? ` msg=${json.msg || json.message || json.data.msg}` : ''}`
+        } catch { /* 非 JSON 或正文已消费 */ }
+        let path = url
+        try { path = `${new URL(url).hostname}${new URL(url).pathname}` } catch { /* 保留原样 */ }
+        apiLog.push(`${path} HTTP ${response.status()} ${summary}`.trim())
+      }
+      page.on('response', onResponse)
+      try {
+        await page.goto(YSP_HOME, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+        await this.ensureHome()
+        const status = await this.readAccount()
+        if (!status.authenticated) {
+          const remaining = (await page.cookies('https://www.yangshipin.cn').catch(() => [])).map(cookie => cookie.name)
+          const signed = await page.evaluate(async () => {
+            const sdk = window.yspLogin?.default
+            if (!sdk?.isSigned) return 'sdk-missing'
+            try { return await sdk.isSigned() } catch (error) { return `error:${error?.message || error}` }
+          }).catch(error => `error:${firstLine(error)}`)
+          status.diagnostic = {
+            imported: cookies.map(cookie => cookie.name),
+            remaining,
+            signed,
+            api: [...apiLog],
+          }
+        }
+        return status
+      } finally {
+        page.off('response', onResponse)
+      }
     })
   }
 

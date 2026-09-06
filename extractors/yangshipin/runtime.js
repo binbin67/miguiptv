@@ -142,11 +142,44 @@ export const browserLoginFlow = {
     }
     browserLogin.noteAccount(status)
     if (!status.authenticated) {
-      throw new Error('官网没有认出这份登录态：可能已过期或不完整，请在央视频官网确认已登录后重新点击书签工具复制')
+      throw new Error(explainImportFailure(status.diagnostic))
     }
     log(`已通过导入关联央视频账号：${status.account?.nickname || '已登录'}${status.account?.vip ? ' · VIP 有效' : ' · 未识别 VIP'}`)
     return statusSnapshot()
   },
+}
+
+/**
+ * 把导入失败翻译成用户能照着做的话，并把完整诊断打进日志。
+ * 判断顺序：刷新接口被拒（令牌已作废）→ 用户信息接口被拒 → SDK 校验后清空了 cookie → 导入内容本身缺身份 cookie。
+ */
+function explainImportFailure(diagnostic) {
+  const generic = '请在央视频官网确认右上角已显示昵称，刷新页面后在开发者工具 Network 里重新复制 Cookie 值并立即导入'
+  if (!diagnostic) return `官网没有认出这份登录态：${generic}`
+  const api = diagnostic.api || []
+  printYellow(`[央视频] 导入登录态未通过官网校验：种入 ${diagnostic.imported?.length ?? 0} 个 cookie [${(diagnostic.imported || []).join(', ')}]；校验后剩余 [${(diagnostic.remaining || []).join(', ')}]；isSigned=${JSON.stringify(diagnostic.signed)}；接口：${api.length ? api.join(' | ') : '（无账号接口请求）'}`)
+  const failed = api.filter(line => !/ HTTP 2\d\d code=0 data\.code=(?:0|-)/.test(line))
+  const refresh = failed.find(line => line.includes('/v1/auth/account/refresh'))
+  if (refresh) {
+    if (/10005|inner token/i.test(refresh)) {
+      return `官网续期接口回「inner token失效」（${refresh}）：会话 cookie 已作废或不配套，通常是电脑上的官网页面在你复制之后又续期了一次。请回到官网刷新页面确认仍是登录状态，重新复制 Cookie 值后马上导入`
+    }
+    return `官网拒绝了这份登录态的刷新令牌（${refresh}）：${generic}`
+  }
+  const userinfo = failed.find(line => line.includes('/v1/user/userinfo'))
+  if (userinfo) {
+    return `官网用户信息接口不认这份登录态（${userinfo}）：${generic}`
+  }
+  const identity = ['ysp_openid', 'yspopenid', 'vusession']
+  const importedIdentity = (diagnostic.imported || []).filter(name => identity.includes(name))
+  const remainingIdentity = (diagnostic.remaining || []).filter(name => identity.includes(name))
+  if (importedIdentity.length && !remainingIdentity.length) {
+    return `官网 SDK 校验后清掉了登录 cookie，说明这份登录态已失效：${generic}`
+  }
+  if (!importedIdentity.length) {
+    return `导入内容里没有 vusession 这类会话 cookie，官网无法识别账号：请在开发者工具 Network 里点开任一 yangshipin.cn 请求，复制 Request Headers 中 Cookie 的完整值`
+  }
+  return `官网没有认出这份登录态（isSigned=${JSON.stringify(diagnostic.signed)}）：${generic}`
 }
 
 let keepaliveTimer = null

@@ -4290,16 +4290,15 @@
                         <button id="yspLoginCheck" class="btn btn-sm" onclick="checkYspBrowserLogin()">检查登录态</button>
                         <button id="yspLoginClose" class="btn btn-sm" onclick="closeYspBrowserSession()">关闭后台浏览器</button>
                     </div>
-                    <div id="yspLoginMessage" style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">登录态保存在服务端数据目录的专用浏览器 profile；10 个会员频道共用，无需逐台导入。自动弹窗只支持从运行服务的电脑本机访问 localhost 后台；Docker / NAS 等没有桌面的部署请用下方书签工具导入登录态。</div>
+                    <div id="yspLoginMessage" style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">登录态保存在服务端数据目录的专用浏览器 profile；10 个会员频道共用，无需逐台导入。自动弹窗只支持从运行服务的电脑本机访问 localhost 后台；Docker / NAS 等没有桌面的部署请从自己电脑的浏览器复制 Cookie 导入。</div>
                     <div class="bookmarklet-actions" style="margin-top:10px;">
-                        <a id="yspBookmarklet" class="bookmarklet-link" draggable="true">获取央视频登录态</a>
                         <a href="https://www.yangshipin.cn/tv/home" target="_blank" rel="noreferrer">打开央视频官网 ↗</a>
                     </div>
                     <div style="display:flex; gap:8px; align-items:flex-start; margin-top:8px; flex-wrap:wrap;">
-                        <textarea id="yspLoginImportInput" rows="2" placeholder="粘贴书签工具复制的登录态（以 YSP1. 开头）；也接受从开发者工具复制的整段 Cookie 值" style="flex:1; min-width:240px; padding:6px 8px; border:1px solid #ddd; border-radius:4px; font-size:12px; font-family:monospace; resize:vertical;"></textarea>
+                        <textarea id="yspLoginImportInput" rows="2" placeholder="粘贴从开发者工具复制的整段 Cookie 值（vusession=…; ysp_strRefreshtoken=…; …）" style="flex:1; min-width:240px; padding:6px 8px; border:1px solid #ddd; border-radius:4px; font-size:12px; font-family:monospace; resize:vertical;"></textarea>
                         <button id="yspLoginImport" class="btn btn-sm btn-primary" onclick="importYspLoginState()">导入登录态</button>
                     </div>
-                    <div style="font-size:12px; color:#888; margin-top:6px; line-height:1.7;">在自己电脑的浏览器里登录央视频官网，把「获取央视频登录态」拖到书签栏，在已登录的官网页面点击它，复制结果粘贴到上方并导入。导入的 cookie 只写进服务端浏览器 profile，不进配置文件；服务端之后会自动续期，官网撤销或长期失效时重新导入即可。</div>
+                    <div style="font-size:12px; color:#888; margin-top:6px; line-height:1.7;">在自己电脑的浏览器登录央视频官网后，按 F12（Mac 按 ⌥⌘I）打开开发者工具，切到 Network（网络），刷新页面，点开任意一个 <code>yangshipin.cn</code> 的请求，在 Request Headers（请求标头）里单击 <code>Cookie</code> 的值后按 ⌘C（Windows 按 Ctrl+C）复制，粘贴到上方并导入。必须用这种方式：央视频的会话 cookie 是 HttpOnly，网页脚本和书签工具读不到，只有请求头里有完整的一套。导入的 cookie 只写进服务端浏览器 profile，不进配置文件；服务端之后会自动续期，官网撤销或长期失效时重新导入即可。</div>
                 </div>`;
             }
             if (key === 'beijing-cookie') {
@@ -4589,7 +4588,6 @@
             initMiguBookmarklet();
             initFengshowsBookmarklet();
             initSichuanBookmarklet();
-            initYspBookmarklet();
             initYspLoginHelper();
             // 记录本次渲染的初始值，保存时只提交用户改过的字段（见函数注释）
             captureExtractorInitialValues(m);
@@ -4727,9 +4725,9 @@
             } else if (authenticated) {
                 label = `⚠️ ${account.nickname || '已登录'} · 未识别 VIP`;
             } else if (!available) {
-                label = '未登录 · 请用书签工具导入登录态';
+                label = '未登录 · 请从浏览器复制 Cookie 导入';
             } else if (!yspLoginLocalPage && !authenticated) {
-                label = '未登录 · 本机弹窗或书签工具导入';
+                label = '未登录 · 本机弹窗或复制 Cookie 导入';
             }
             state.textContent = label;
             state.className = className;
@@ -4738,8 +4736,8 @@
                 : (data.reason || data.message))) || '尚未检测到有效央视频登录态。';
             if (!authenticated && !active) {
                 detail.textContent += available && yspLoginLocalPage
-                    ? ' 也可以用下方书签工具从自己电脑的浏览器导入登录态。'
-                    : ' 请用下方「获取央视频登录态」书签工具从自己电脑的浏览器导入；在运行服务的电脑上用 localhost 打开后台时也可直接弹出官方登录窗。';
+                    ? ' 也可以按下方说明从自己电脑的浏览器复制 Cookie 导入。'
+                    : ' 请按下方说明从自己电脑的浏览器复制 Cookie 导入；在运行服务的电脑上用 localhost 打开后台时也可直接弹出官方登录窗。';
             }
             detail.style.color = (data && data.status === 'error') || !available ? '#ff4d4f' : '#888';
             if (open) {
@@ -4776,26 +4774,11 @@
             else yspLoginTimer = null;
         }
 
-        // 央视频登录态书签工具：官网 SDK 用 js-cookie 把登录材料写在 yangshipin.cn 域下、都不是
-        // HttpOnly，所以在已登录的官网页面读 document.cookie 就能拿全。整包 base64 后带 YSP1. 前缀，
-        // 服务端只认这个形态或整段 Cookie 头；服务端会把它种进自己的浏览器 profile 并让 SDK 校验。
-        function initYspBookmarklet() {
-            const link = document.getElementById('yspBookmarklet');
-            if (!link) return;
-            link.href = `javascript:(()=>{try{
-if(!/(^|\\.)yangshipin\\.cn$/i.test(location.hostname))throw new Error('请先打开央视频官网（yangshipin.cn）并登录，再点击此书签');
-const cookies={};document.cookie.split(';').forEach(p=>{const i=p.indexOf('=');if(i>0){const k=p.slice(0,i).trim();const v=p.slice(i+1).trim();if(k&&v)cookies[k]=v;}});
-if(!cookies.ysp_strRefreshtoken&&!cookies.vusession&&!cookies.ysp_openid&&!cookies.yspopenid)throw new Error('没有检测到央视频登录态：请先在官网右上角登录（刷新页面后再试）');
-const payload='YSP1.'+btoa(unescape(encodeURIComponent(JSON.stringify({v:1,at:Date.now(),host:location.hostname,cookies}))));
-navigator.clipboard.writeText(payload).then(()=>alert('央视频登录态已复制，请粘贴到 IPTV 源管理 → 央视频 → 导入登录态。')).catch(()=>prompt('请复制央视频登录态：',payload));
-}catch(e){alert(e.message)}})()`;
-        }
-
         async function importYspLoginState() {
             const input = document.getElementById('yspLoginImportInput');
             const button = document.getElementById('yspLoginImport');
             const payload = (input && input.value || '').trim();
-            if (!payload) { showStatus('请先粘贴书签工具复制的登录态', 'error'); return; }
+            if (!payload) { showStatus('请先粘贴从开发者工具复制的 Cookie 值', 'error'); return; }
             stopYspLoginPolling();
             const gen = yspLoginGen;
             const detail = document.getElementById('yspLoginMessage');
@@ -7587,7 +7570,7 @@ if(success){
         const SYSTEM_CHANNEL_IDS = new Set([SYSTEM_ANNOUNCEMENT_ID, 'iptv-ysp-login-guide']);
         const SYSTEM_CHANNEL_NOTES = {
             'iptv-announcement': '项目自带的使用说明与版权提示短片',
-            'iptv-ysp-login-guide': '演示如何用书签工具把央视频登录态导入 iPTV 的教程短片，给 Docker / NAS 用户看的',
+            'iptv-ysp-login-guide': '演示如何从浏览器复制 Cookie 把央视频登录态导入 iPTV 的教程短片，给 Docker / NAS 用户看的',
         };
 
         function isSystemAnnouncementChannel(channel) {

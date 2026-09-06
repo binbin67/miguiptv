@@ -324,6 +324,30 @@
         .dialog-submit { margin-top: 18px; height: 50px; border-radius: 11px; background: #d0342c; color: white; display: grid; place-items: center; font-size: 20px; font-weight: 700; }
         .wechat-hint { margin-top: 14px; text-align: center; color: var(--muted); font-size: 18px; }
 
+        /* 开发者工具示意 */
+        .devtools { background: #fbfcfe; }
+        .devtools-tabs { display: flex; gap: 26px; height: 52px; padding: 0 22px; align-items: center; border-bottom: 1px solid var(--line); background: var(--surface-strong); color: var(--text-secondary); font-size: 19px; }
+        .devtools-tabs .on { color: var(--indigo); font-weight: 720; border-bottom: 3px solid var(--indigo); padding: 14px 0 11px; }
+        .devtools-toolbar { display: flex; gap: 22px; align-items: center; height: 46px; padding: 0 22px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 17px; }
+        .devtools-toolbar .rec { width: 14px; height: 14px; border-radius: 50%; background: #e0443e; }
+        .devtools-toolbar .filter { margin-left: auto; padding: 4px 14px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+        .req-list { padding: 8px 0 14px; }
+        .req-head, .req { display: grid; grid-template-columns: 1fr 90px 110px 90px; gap: 10px; padding: 9px 22px; font-size: 18px; }
+        .req-list.narrow .req-head, .req-list.narrow .req { grid-template-columns: 1fr; }
+        .req-head { color: var(--muted); border-bottom: 1px solid var(--line); font-size: 16px; }
+        .req { color: var(--text-secondary); border-bottom: 1px solid #eef1f6; font-family: "SF Mono", Menlo, monospace; font-size: 17px; }
+        .req.hot { background: var(--indigo-soft); color: var(--indigo); font-weight: 700; }
+        .devtools-split { display: grid; grid-template-columns: 250px 1fr; min-height: 380px; }
+        .devtools-split .req-list { border-right: 1px solid var(--line); }
+        .headers { padding: 0 0 16px; }
+        .headers-tabs { display: flex; gap: 22px; height: 46px; padding: 0 20px; align-items: center; border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 17px; }
+        .headers-tabs .on { color: var(--indigo); font-weight: 720; }
+        .headers-title { padding: 14px 20px 8px; color: var(--text); font-size: 18px; font-weight: 720; }
+        .hdr { display: grid; grid-template-columns: 118px 1fr; gap: 12px; padding: 9px 20px; font-size: 16px; line-height: 1.45; color: var(--text-secondary); font-family: "SF Mono", Menlo, monospace; word-break: break-all; }
+        .hdr span:first-child { color: var(--text); font-weight: 700; }
+        .hdr.hot { background: var(--indigo-soft); color: var(--indigo); border-radius: 10px; margin: 4px 12px; padding: 10px 8px; }
+        .hdr.hot span:first-child { color: var(--indigo); }
+
         .alert-mock {
             position: absolute;
             left: 50%;
@@ -448,9 +472,9 @@
                     <div class="intro-copy">
                         <span class="eyebrow">Yangshipin VIP · How to</span>
                         <h1>央视频会员频道<br>把登录态导入 iPTV</h1>
-                        <p class="lead">适用于 Docker / NAS 等没有桌面的部署：在<strong>自己电脑的浏览器</strong>登录一次央视频，把登录态交给服务端，10 个会员频道就能在电视上播。</p>
+                        <p class="lead">适用于 Docker / NAS 等没有桌面的部署：在<strong>自己电脑的浏览器</strong>登录一次央视频，把浏览器里的 Cookie 交给服务端，10 个会员频道就能在电视上播。</p>
                         <div class="feature-pills">
-                            <span class="feature-pill">不用输入密码</span>
+                            <span class="feature-pill">iPTV 不接触密码</span>
                             <span class="feature-pill">约两分钟</span>
                             <span class="feature-pill">只做一次</span>
                             <span class="feature-pill">服务端自动续期</span>
@@ -459,55 +483,58 @@
                     <div class="overview" aria-hidden="true">
                         <h3>四步完成</h3>
                         <ol>
-                            <li><span>1</span><div>把书签工具拖到书签栏<small>iPTV 后台 → 源管理 → 央视频</small></div></li>
-                            <li><span>2</span><div>登录央视频官网<small>yangshipin.cn，手机验证码或微信</small></div></li>
-                            <li><span>3</span><div>在官网页面点击书签<small>登录态自动复制</small></div></li>
+                            <li><span>1</span><div>登录央视频官网<small>yangshipin.cn，手机验证码或微信</small></div></li>
+                            <li><span>2</span><div>打开开发者工具 → Network<small>F12（Mac 按 ⌥⌘I），刷新页面</small></div></li>
+                            <li><span>3</span><div>复制请求里的 Cookie 值<small>点开任一 yangshipin.cn 请求</small></div></li>
                             <li><span>4</span><div>粘贴到 iPTV 后台导入<small>显示昵称与 VIP 即完成</small></div></li>
                         </ol>
                     </div>
                 </div>
             </section>
 
-            <!-- 1 拖书签 -->
-            <section class="slide slide-1">
+            <!-- 2 打开开发者工具 -->
+            <section class="slide slide-2">
                 <div class="step-layout">
                     <div class="step-copy">
-                        <span class="step-badge"><span class="num">1</span>把书签工具拖到书签栏</span>
-                        <h2>打开 iPTV 后台<br>源管理 → 央视频</h2>
-                        <p class="lead">卡片里有一个<strong>「获取央视频登录态」</strong>按钮。按住它，拖到浏览器顶部的书签栏松开，它就成了一个书签。</p>
-                        <div class="tip"><span class="symbol">!</span><span>书签栏没显示？Chrome / Edge 按 ⌘⇧B（Windows 按 Ctrl+Shift+B）先把书签栏打开。</span></div>
+                        <span class="step-badge"><span class="num">2</span>打开开发者工具</span>
+                        <h2>按 F12 打开 Network<br>再刷新一次页面</h2>
+                        <p class="lead">留在已登录的官网页面，按 <strong>F12</strong>（Mac 按 <strong>⌥⌘I</strong>）打开开发者工具，切到 <strong>Network（网络）</strong>标签，然后刷新页面，让列表里出现请求。</p>
+                        <div class="tip"><span class="symbol">!</span><span>看不到 Network 标签时点工具栏右侧的「»」展开；Chrome、Edge、Safari 都有这个面板。</span></div>
                     </div>
                     <div class="mock-stack">
                         <div class="browser">
-                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">http://你的NAS地址:1905/admin</span></div>
-                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="drop">松开放到这里 → 获取央视频登录态</span></div>
-                            <div class="browser-body">
-                                <div class="card-mock">
-                                    <div class="card-title">🔑 央视频账号 <span class="badge">未登录</span></div>
-                                    <div class="card-row"><span class="btn-mock primary">打开央视频官方登录窗口</span><span class="btn-mock">检查登录态</span></div>
-                                    <div class="card-row"><span class="btn-mock bookmarklet">获取央视频登录态</span><span class="btn-mock link">打开央视频官网 ↗</span></div>
-                                    <div class="textarea-mock">粘贴书签工具复制的登录态（以 YSP1. 开头）</div>
+                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">https://www.yangshipin.cn/tv/home</span></div>
+                            <div class="devtools">
+                                <div class="devtools-tabs"><span>Elements</span><span>Console</span><span class="on">Network</span><span>Sources</span><span>Application</span></div>
+                                <div class="devtools-toolbar"><span class="rec"></span><span>Preserve log</span><span>Disable cache</span><span class="filter">Filter</span></div>
+                                <div class="req-list">
+                                    <div class="req-head"><span>Name</span><span>Status</span><span>Type</span><span>Size</span></div>
+                                    <div class="req"><span>home</span><span>200</span><span>document</span><span>21 kB</span></div>
+                                    <div class="req"><span>yspLogin.min.js</span><span>200</span><span>script</span><span>179 kB</span></div>
+                                    <div class="req hot"><span>userinfo</span><span>200</span><span>xhr</span><span>1.2 kB</span></div>
+                                    <div class="req"><span>live_stream</span><span>200</span><span>xhr</span><span>3.4 kB</span></div>
+                                    <div class="req"><span>bkliveinfo</span><span>200</span><span>xhr</span><span>0.9 kB</span></div>
                                 </div>
                             </div>
                         </div>
-                        <span class="pointer" style="left: 470px; bottom: 150px;">← 按住它，拖到上面的书签栏</span>
+                        <span class="pointer" style="right: 40px; top: 96px;">← 切到 Network，然后刷新</span>
                     </div>
                 </div>
             </section>
 
-            <!-- 2 登录官网 -->
-            <section class="slide slide-2">
+            <!-- 1 登录官网 -->
+            <section class="slide slide-1">
                 <div class="step-layout">
                     <div class="step-copy">
-                        <span class="step-badge"><span class="num">2</span>登录央视频官网</span>
-                        <h2>在同一台电脑打开<br>yangshipin.cn</h2>
+                        <span class="step-badge"><span class="num">1</span>登录央视频官网</span>
+                        <h2>在自己的电脑上打开<br>yangshipin.cn</h2>
                         <p class="lead">用<strong>手机号验证码</strong>或<strong>微信</strong>登录。右上角出现头像和昵称，就是登录成功。密码和验证码都只输在官网里，iPTV 不会看到。</p>
                         <div class="tip"><span class="symbol">!</span><span>要用有会员权益的那个账号登录；登录后先别关这个页面。</span></div>
                     </div>
                     <div class="mock-stack">
                         <div class="browser">
                             <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">https://www.yangshipin.cn/tv/home</span></div>
-                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="bm hot"><i></i>获取央视频登录态</span></div>
+                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span></div>
                             <div class="browser-body">
                                 <div class="site-header">
                                     <span class="site-logo"><i></i>央视频</span>
@@ -528,34 +555,40 @@
                 </div>
             </section>
 
-            <!-- 3 点书签 -->
+            <!-- 3 复制 Cookie -->
             <section class="slide slide-3">
                 <div class="step-layout">
                     <div class="step-copy">
-                        <span class="step-badge"><span class="num">3</span>在官网页面点击书签</span>
-                        <h2>留在已登录的官网页面<br>点一下书签栏里的它</h2>
-                        <p class="lead">看到<strong>「央视频登录态已复制」</strong>提示就成了。如果弹出的是一个带文字的输入框，把里面的内容全选复制即可。</p>
-                        <div class="tip"><span class="symbol">!</span><span>提示"没有检测到登录态"时，说明官网还没登录成功，刷新页面确认右上角有昵称后再点一次。</span></div>
+                        <span class="step-badge"><span class="num">3</span>复制请求里的 Cookie 值</span>
+                        <h2>点开一个请求<br>复制 Cookie 那一行的值</h2>
+                        <p class="lead">在列表里点开任意一个 <strong>yangshipin.cn</strong> 的请求（比如 userinfo），在 <strong>Request Headers（请求标头）</strong>里找到 <strong>Cookie</strong>，单击它的值，按 <strong>⌘C</strong>（Windows 按 Ctrl+C）复制。</p>
+                        <div class="tip"><span class="symbol">!</span><span>为什么不能用书签工具？央视频的会话 cookie 是 HttpOnly，网页脚本读不到，只有请求头里才有完整的一套。</span></div>
                     </div>
                     <div class="mock-stack">
                         <div class="browser">
                             <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">https://www.yangshipin.cn/tv/home</span></div>
-                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="bm hot"><i></i>获取央视频登录态</span></div>
-                            <div class="browser-body dim">
-                                <div class="site-header">
-                                    <span class="site-logo"><i></i>央视频</span>
-                                    <span class="site-nav"><span>首页</span><span>电视</span><span>体育</span><span>纪录片</span></span>
-                                    <span class="site-user"><span class="avatar"></span>你的昵称 · VIP</span>
+                            <div class="devtools">
+                                <div class="devtools-tabs"><span>Elements</span><span>Console</span><span class="on">Network</span><span>Sources</span><span>Application</span></div>
+                                <div class="devtools-split">
+                                    <div class="req-list narrow">
+                                        <div class="req-head"><span>Name</span></div>
+                                        <div class="req"><span>home</span></div>
+                                        <div class="req"><span>yspLogin.min.js</span></div>
+                                        <div class="req hot"><span>userinfo</span></div>
+                                        <div class="req"><span>live_stream</span></div>
+                                    </div>
+                                    <div class="headers">
+                                        <div class="headers-tabs"><span class="on">Headers</span><span>Payload</span><span>Preview</span><span>Response</span></div>
+                                        <div class="headers-title">▾ Request Headers</div>
+                                        <div class="hdr"><span>Accept:</span><span>application/json, text/plain, */*</span></div>
+                                        <div class="hdr hot"><span>Cookie:</span><span>vusession=8a3c…; ysp_strRefreshtoken=A1B2…; accesstoken=9f0e…; yspopenid=o7Kq…; endtime=17887…</span></div>
+                                        <div class="hdr"><span>Origin:</span><span>https://www.yangshipin.cn</span></div>
+                                        <div class="hdr"><span>User-Agent:</span><span>Mozilla/5.0 …</span></div>
+                                    </div>
                                 </div>
-                                <div class="dialog-mock" style="visibility: hidden; min-height: 330px;"></div>
-                            </div>
-                            <div class="alert-mock">
-                                <div class="alert-host">www.yangshipin.cn 显示</div>
-                                <div class="alert-text">央视频登录态已复制，请粘贴到 IPTV 源管理 → 央视频 → 导入登录态。</div>
-                                <div class="alert-ok">确定</div>
                             </div>
                         </div>
-                        <span class="pointer" style="left: 236px; top: 108px;">↑ 点这里</span>
+                        <span class="pointer" style="right: 52px; bottom: 118px;">↑ 单击这个值，⌘C 复制</span>
                     </div>
                 </div>
             </section>
@@ -566,18 +599,18 @@
                     <div class="step-copy">
                         <span class="step-badge"><span class="num">4</span>粘贴到 iPTV 后台导入</span>
                         <h2>回到央视频卡片<br>粘贴，点「导入登录态」</h2>
-                        <p class="lead">服务端会把这份登录态交给官网校验，<strong>十几秒</strong>后卡片显示你的昵称和 VIP 状态，10 个会员频道随即进入播放列表。</p>
-                        <div class="tip"><span class="symbol">!</span><span>提示"官网没有认出这份登录态"时，回到官网确认仍是登录状态，重新点一次书签再导入。</span></div>
+                        <p class="lead">服务端会把这份 Cookie 交给官网校验，<strong>十几秒</strong>后卡片显示你的昵称和 VIP 状态，10 个会员频道随即进入播放列表。</p>
+                        <div class="tip"><span class="symbol">!</span><span>提示"缺少会话 cookie"时，说明复制的不是请求头里的 Cookie；回到 Network 重新复制一次。</span></div>
                     </div>
                     <div class="mock-stack">
                         <div class="browser">
                             <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">http://你的NAS地址:1905/admin</span></div>
-                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span><span class="bm hot"><i></i>获取央视频登录态</span></div>
+                            <div class="bookmark-bar"><span class="bm"><i></i>常用</span><span class="bm"><i></i>NAS</span></div>
                             <div class="browser-body">
                                 <div class="card-mock">
                                     <div class="card-title">🔑 央视频账号 <span class="badge on">✅ 你的昵称 · VIP 有效</span></div>
-                                    <div class="card-row"><span class="btn-mock bookmarklet">获取央视频登录态</span><span class="btn-mock link">打开央视频官网 ↗</span></div>
-                                    <div class="textarea-mock filled"><b>YSP1.</b>eyJ2IjoxLCJhdCI6MTc4ODY5ODc5NDkyMywiaG9zdCI6Ind3dy55YW5nc2hpcGluLmNuIiwiY29va2llcyI6eyJ5c3Bfc3Ry…</div>
+                                    <div class="card-row"><span class="btn-mock link">打开央视频官网 ↗</span></div>
+                                    <div class="textarea-mock filled"><b>vusession=</b>8a3c…; <b>ysp_strRefreshtoken=</b>A1B2…; <b>accesstoken=</b>9f0e…; yspopenid=o7Kq…; endtime=17887…; guid=…</div>
                                     <div class="card-row"><span class="btn-mock primary">导入登录态</span><span class="card-hint" style="margin: 0;">正在让官网校验，约需十几秒…</span></div>
                                 </div>
                             </div>
@@ -606,7 +639,7 @@
                         </article>
                         <article class="info-card">
                             <span class="icon">↻</span>
-                            <h3>提示未登录时，重做第 2～4 步</h3>
+                            <h3>提示未登录时，重做第 1～4 步</h3>
                             <p>官网要求重新验证、账号退出或会员到期时，在官网重新登录后再导入一次即可。</p>
                         </article>
                     </div>

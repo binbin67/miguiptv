@@ -242,7 +242,7 @@ try {
     const denied = JSON.parse(noIdentity.body)
     assert.equal(denied.success, false)
     assert.notEqual(denied.code, 'LOCAL_BROWSER_LOGIN_ONLY')
-    assert.match(denied.message, /没有央视频登录 cookie/)
+    assert.match(denied.message, /会话 cookie/)
 
     const empty = JSON.parse((await post('')).body)
     assert.equal(empty.success, false)

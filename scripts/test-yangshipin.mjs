@@ -13,7 +13,6 @@ import { createCKey } from '../extractors/yangshipin/ckey.js'
 import { isOfficialMediaUrl, requestPlayUrls, selectWorkingManifest } from '../extractors/yangshipin/api.js'
 import { CACHE_MS, createResolver } from '../extractors/yangshipin/resolver.js'
 import {
-  IMPORT_PREFIX,
   LOGIN_IDENTITY_COOKIES,
   YspBrowserLogin,
   YspBrowserSession,
@@ -121,23 +120,22 @@ await checkAsync('官网 SDK 校验异常会清掉内存中的旧账号，不继
   assert.equal(session.account, null)
 })
 
-check('导入登录态：认书签工具输出、JSON 与整段 Cookie 头，拒绝没有身份 cookie 的内容', () => {
-  const cookies = { ysp_strRefreshtoken: 'rt-1', vusession: 'vs-1', guid: 'g', 'bad name': 'x', empty: '' }
-  const payload = IMPORT_PREFIX + Buffer.from(JSON.stringify({ v: 1, cookies })).toString('base64')
-  const parsed = parseImportedLoginState(payload)
-  assert.deepEqual(parsed.map(c => c.name), ['ysp_strRefreshtoken', 'vusession', 'guid'])
-  assert.equal(parsed[0].value, 'rt-1')
-
-  assert.deepEqual(parseImportedLoginState('{"cookies":{"ysp_openid":"o"}}').map(c => c.name), ['ysp_openid'])
-  assert.deepEqual(parseImportedLoginState('{"yspopenid":"o","ysp_uv":"u"}').map(c => c.name), ['yspopenid', 'ysp_uv'])
-  assert.deepEqual(parseImportedLoginState(' vusession=abc; ysp_pc=1 ; junk ').map(c => `${c.name}=${c.value}`), ['vusession=abc', 'ysp_pc=1'])
+check('导入登录态：认整段 Cookie 头与 JSON，缺会话 cookie 时在解析阶段就说明原因', () => {
+  const parsed = parseImportedLoginState(' vusession=abc; ysp_strRefreshtoken=rt-1; guid=g; bad name=x; empty= ')
+  assert.deepEqual(parsed.map(c => `${c.name}=${c.value}`), ['vusession=abc', 'ysp_strRefreshtoken=rt-1', 'guid=g'])
+  // 直接从请求头复制时常带着 "Cookie:" 前缀
+  assert.deepEqual(parseImportedLoginState('Cookie: accesstoken=a; ysp_pc=1').map(c => c.name), ['accesstoken', 'ysp_pc'])
+  assert.deepEqual(parseImportedLoginState('{"cookies":{"refreshtoken":"r","ysp_uv":"u"}}').map(c => c.name), ['refreshtoken', 'ysp_uv'])
+  assert.deepEqual(parseImportedLoginState('{"vusession":"v"}').map(c => c.name), ['vusession'])
 
   assert.throws(() => parseImportedLoginState(''), /先粘贴/)
-  assert.throws(() => parseImportedLoginState('ysp_pc=1; ysp_uv=2'), /没有央视频登录 cookie/)
-  assert.throws(() => parseImportedLoginState(IMPORT_PREFIX + '!!!'), /无法解析/)
+  // 只有 js 可见的 ysp_* 令牌 = 书签工具那种来源，官网必拒：解析阶段就点明缺 HttpOnly 会话 cookie
+  assert.throws(() => parseImportedLoginState('ysp_strRefreshtoken=rt; yspopenid=o; endtime=1'), /HttpOnly 会话 cookie/)
+  assert.throws(() => parseImportedLoginState('ysp_pc=1; ysp_uv=2'), /会话 cookie/)
+  assert.throws(() => parseImportedLoginState('junk without equals'), /没有 cookie/)
   assert.throws(() => parseImportedLoginState('{"cookies":[]}'), /没有 cookie 列表/)
   assert.throws(() => parseImportedLoginState('x'.repeat(70 * 1024)), /过长/)
-  assert.ok(LOGIN_IDENTITY_COOKIES.includes('ysp_strRefreshtoken'))
+  assert.deepEqual(LOGIN_IDENTITY_COOKIES, ['vusession', 'accesstoken', 'refreshtoken'])
 })
 
 await checkAsync('导入登录态会先清旧 cookie、按 .yangshipin.cn 域种入、重载首页再由 SDK 校验，并回调账号结果', async () => {
@@ -147,6 +145,7 @@ await checkAsync('导入登录态会先清旧 cookie、按 .yangshipin.cn 域种
   let cookiesNow = [{ name: 'vusession', value: 'old', domain: '.yangshipin.cn', path: '/' }, { name: 'ysp_uv', value: 'u', domain: 'www.yangshipin.cn', path: '/' }]
   const page = {
     isClosed: () => false,
+    on() {}, off() {},
     url: () => 'https://www.yangshipin.cn/tv/home',
     cookies: async () => cookiesNow,
     deleteCookie: async (...items) => { calls.push(['delete', items.map(i => i.name)]); cookiesNow = [] },
@@ -158,6 +157,8 @@ await checkAsync('导入登录态会先清旧 cookie、按 .yangshipin.cn 域种
   session.ensureBrowserNow = async ({ visible }) => { calls.push(['browser', visible]); session.browser = { connected: true }; session.page = page; return page }
 
   const status = await session.importLoginCookies([{ name: 'ysp_strRefreshtoken', value: 'rt' }, { name: 'vusession', value: 'vs' }])
+  const flagged = calls.find(c => c[0] === 'set')[1].map(c => [c.name, c.httpOnly])
+  assert.deepEqual(flagged, [['ysp_strRefreshtoken', false], ['vusession', true]])
   assert.equal(status.authenticated, true)
   assert.equal(status.account.nickname, '导入账号')
   assert.deepEqual(calls[0], ['browser', false])
@@ -170,10 +171,14 @@ await checkAsync('导入登录态会先清旧 cookie、按 .yangshipin.cn 域种
   assert.deepEqual(seen, [{ authenticated: true, account: { nickname: '导入账号', type: 'wechat', vip: true } }])
 
   // 官网没认出来：明确回调「未登录」，供 runtime 撤掉保活标记
-  page.evaluate = async () => null
+  page.evaluate = async fn => (String(fn).includes('isSigned') ? false : null)
   const denied = await session.importLoginCookies([{ name: 'vusession', value: 'stale' }])
   assert.equal(denied.authenticated, false)
   assert.deepEqual(seen.at(-1), { authenticated: false, account: null })
+  assert.deepEqual(denied.diagnostic.imported, ['vusession'])
+  assert.deepEqual(denied.diagnostic.remaining, ['vusession'])
+  assert.equal(denied.diagnostic.signed, false)
+  assert.deepEqual(denied.diagnostic.api, [])
 })
 
 check('官网桥接 fMP4 能解析时标、序号和精确时长', () => {

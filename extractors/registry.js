@@ -57,8 +57,9 @@
  *       upstreamHeaders 可选；可以是固定请求头对象，也可以是接收目标 URL、返回请求头的
  *       同步函数。仅由本机清单/分片代理向官方 CDN 发送（防盗链平台）。函数形态用于
  *       按 Cookie 的 Domain / Path 限定发送范围，不能把一个 CDN 的凭据泄漏给另一个 CDN。
- *       注意 User-Agent 是例外：代理层统一改写成自己的 UA，这里声明了也不会生效，
- *       原因见 utils/hlsProxy.js 里 UA 常量上方的说明。Referer / Origin 等其余头正常透传。
+ *       注意 User-Agent：固定对象里声明的会被代理层统一改写成自己的 UA，声明了也不生效，
+ *       原因见 utils/hlsProxy.js 里 UA 常量上方的说明；函数形态返回的 User-Agent 会原样发出，
+ *       留给 CDN 只认特定播放器标识的平台（安徽视讯）。Referer / Origin 等其余头正常透传。
  *       upstreamUrlTransform(url) 可选；全代理登记清单内的子清单/分片地址前调用。
  *       用于每条 HLS 路径都要独立签名的平台，函数必须把输入限制在平台自己的主机。
  *       manifestText + manifestUrl 可选；浏览器能读取、普通 HTTP 客户端会被指纹校验
@@ -102,6 +103,7 @@
  */
 import bilibiliLive from './bilibili-live/index.js'
 import asianLive from './asian-live/index.js'
+import anhui from './anhui/index.js'
 import beidou from './beidou/index.js'
 import beijing from './beijing/index.js'
 import chongqing from './chongqing/index.js'
@@ -152,6 +154,7 @@ const MODULES = [
   bilibiliLive,
   huyaLive,
   douyuLive,
+  anhui,
   beidou,
   beijing,
   chongqing,

@@ -221,6 +221,13 @@ const cdn = http.createServer((req, res) => {
     res.end(SEG_BODY)
     return
   }
+  if (path === '/ua-gated/segment.ts') {
+    // 安徽视讯 CDN 形态：按 User-Agent 放行，只认 App 播放器标识
+    if (req.headers['user-agent'] !== 'ijkplayer') { res.writeHead(403); res.end('ua rejected'); return }
+    res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Content-Length': SEG_BODY.length })
+    res.end(SEG_BODY)
+    return
+  }
   if (path === '/live/index.m3u8') {
     // 咪咕真实形态：master 里一条**相对**子清单
     res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' })
@@ -385,6 +392,24 @@ await checkAsync('按目标地址生成请求头，Cookie 可限定到对应 CDN
   assert.equal(response.status, 200)
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), SEG_BODY)
   assert.deepEqual(calls, [source])
+})
+
+await checkAsync('函数形态请求头声明的 User-Agent 原样发出，固定对象仍被统一 UA 覆盖', async () => {
+  const source = `http://127.0.0.1:${cdn.address().port}/ua-gated/segment.ts`
+  const dynamic = await fetchUpstreamResponse(source, { upstreamHeaders: () => ({ 'User-Agent': 'ijkplayer' }) })
+  assert.equal(dynamic.status, 200)
+  await dynamic.arrayBuffer()
+  const lower = await fetchUpstreamResponse(source, { upstreamHeaders: () => ({ 'user-agent': 'ijkplayer' }) })
+  assert.equal(lower.status, 200, '小写键名不得叠成两份 User-Agent')
+  await lower.arrayBuffer()
+  const fixed = await fetchUpstreamResponse(source, { upstreamHeaders: { 'User-Agent': 'ijkplayer' } })
+  assert.equal(fixed.status, 403, '固定对象里的 UA 维持被统一 UA 覆盖的存量行为')
+  await fixed.arrayBuffer()
+  // 端到端：登记后经本机分片路由转发，UA 随登记的请求头函数一起到达上游
+  const key = register(source, 'anhui-ahwssx', undefined, () => ({ 'User-Agent': 'ijkplayer' }))
+  const resp = await fetch(`${nasBase}/proxy/${key}.ts`)
+  assert.equal(resp.status, 200)
+  assert.deepEqual(Buffer.from(await resp.arrayBuffer()), SEG_BODY)
 })
 
 await checkAsync('分片变换函数随清单地址登记，并在回给播放器前执行', async () => {

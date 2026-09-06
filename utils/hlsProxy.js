@@ -165,8 +165,8 @@ function toProxyManifest(text, pid = '', transform, upstreamHeaders, upstreamUrl
 /**
  * 代理向上游取流时统一使用的 UA。
  *
- * ⚠️ 下方回源都让统一 UA 覆盖模块请求头中的 User-Agent，
- * 所以**模块在 upstreamHeaders 里声明的 User-Agent 不会生效**，一律被换成这个值。
+ * ⚠️ 下方回源都让统一 UA 覆盖**固定对象**形态 upstreamHeaders 里的 User-Agent，
+ * 所以模块用固定对象声明的 User-Agent 不会生效，一律被换成这个值。
  * 这与 registry.js 中「upstreamHeaders 是平台要求的上游请求头」的说法有出入，特此说明，
  * 免得下一个人照着声明 UA 却查不出为何没起作用。
  *
@@ -174,6 +174,11 @@ function toProxyManifest(text, pid = '', transform, upstreamHeaders, upstreamUrl
  * Chrome UA 下开发并验证通过的，它们声明的 Mac / Android / iPhone UA 从未真正发出过。
  * 调换顺序等于把一批正常工作的模块换到未经验证的取流路径上——移动端 UA 很可能拿到不同的
  * 码率或流格式。真遇到某个平台因 UA 取流异常，就针对那一个模块改并实测，不要整体翻。
+ *
+ * 唯一的例外是**函数形态**的 upstreamHeaders：它本就是模块按每一跳目标精确决定请求头的契约，
+ * 它返回的 User-Agent 会原样发出。目前只有安徽视讯用到——该 CDN 按播放器标识放行，App 的
+ * ijkplayer 与这个 Chrome UA 都能过，VLC / AppleCoreMedia / ExoPlayer 等一律 403，走 App 自己
+ * 验证过的标识最稳。加这条例外时其余函数形态模块都没有声明 UA，它们的行为不变。
  */
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
@@ -182,6 +187,17 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 function headersFor(upstreamHeaders, url) {
   const value = typeof upstreamHeaders === 'function' ? upstreamHeaders(url) : upstreamHeaders
   return value && typeof value === 'object' ? value : {}
+}
+
+/** 摘出并删掉请求头里的 User-Agent（不区分大小写），避免与统一 UA 叠成两份。 */
+function takeUserAgent(headers) {
+  let value = ''
+  for (const name of Object.keys(headers)) {
+    if (name.toLowerCase() !== 'user-agent') continue
+    if (!value && headers[name]) value = String(headers[name])
+    delete headers[name]
+  }
+  return value
 }
 
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308])
@@ -208,6 +224,9 @@ async function fetchUpstreamResponse(raw, {
     const target = new URL(url)
     if (!['http:', 'https:'].includes(target.protocol)) throw new Error(`不支持的上游协议：${target.protocol}`)
     const generatedHeaders = { ...headersFor(upstreamHeaders, target.href) }
+    // 见 UA 常量上方说明：只有函数形态声明的 User-Agent 会发出去，固定对象一律用统一 UA
+    const moduleUserAgent = takeUserAgent(generatedHeaders)
+    const userAgent = typeof upstreamHeaders === 'function' && moduleUserAgent ? moduleUserAgent : UA
     // fetch 的自动重定向不会把固定 Cookie/Authorization 带到另一个 origin；手动跟随时
     // 保持这个保护。动态函数已经按每一跳目标重新选择 Cookie，不做这层统一剥离。
     if (typeof upstreamHeaders !== 'function' && target.origin !== initialOrigin) {
@@ -219,7 +238,7 @@ async function fetchUpstreamResponse(raw, {
       method,
       redirect: 'manual',
       signal,
-      headers: { ...generatedHeaders, ...headers, 'User-Agent': UA },
+      headers: { ...generatedHeaders, ...headers, 'User-Agent': userAgent },
     })
     if (!REDIRECT_STATUS.has(response.status)) return response
     const location = response.headers.get('location')

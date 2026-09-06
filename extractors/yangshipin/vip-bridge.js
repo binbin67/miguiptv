@@ -79,16 +79,21 @@ function prefixPath(accessPrefix, path) {
   return `${prefix}${path}`
 }
 
+// 在页面里把捕获的 fMP4 块转成 base64 交给 Node。
+// 必须用 FileReader 这种原生编码：之前的 String.fromCharCode(...bytes.subarray(i, i + 32768))
+// 一次把 32768 个字节当参数压栈，Mac 上默认 1MB 栈没事，Docker 镜像里 Alpine Chromium 被压到
+// --stack-size=96 后直接 RangeError「Maximum call stack size exceeded」，会员频道在 NAS 上一播就挂。
 function base64DrainScript() {
   const chunks = window.__yspMseChunks.splice(0)
-  return chunks.map(chunk => {
-    const bytes = new Uint8Array(chunk.data)
-    let binary = ''
-    for (let i = 0; i < bytes.length; i += 32768) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 32768))
+  return Promise.all(chunks.map(chunk => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      resolve({ mime: chunk.mime, base64: result.slice(result.indexOf(',') + 1) })
     }
-    return { mime: chunk.mime, base64: btoa(binary) }
-  })
+    reader.onerror = () => reject(reader.error || new Error('FileReader failed'))
+    reader.readAsDataURL(new Blob([chunk.data]))
+  })))
 }
 
 /**

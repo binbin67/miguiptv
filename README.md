@@ -451,6 +451,7 @@ node app.js
 
 ### 未发布
 
+- **修复央视频会员频道在 Docker / NAS 上一播就报「Maximum call stack size exceeded」**：会员桥接把官网播放器解扰后的 fMP4 块转成 base64 时，用 `String.fromCharCode(...bytes.subarray(i, i + 32768))` 一次把 32768 个字节当参数压栈；Mac 上默认 1MB 栈没事，官方镜像里 Alpine Chromium 为了兜住纬来体育那类混淆站崩渲染进程，JS 栈被压到 96KB，这一句直接溢出，登录态明明有效也播不了。改为 FileReader 原生编码，不占调用栈；本机用同样的 `--stack-size=96` 参数复现并验证通过，解码字节一致
 - **修复央视频登录态导入在 NAS 上必定失败：书签工具改为复制请求头 Cookie**：v4.11.0 的「获取央视频登录态」书签只读 document.cookie，而用真实账号实测央视频的会话 cookie（vusession、accesstoken、refreshtoken 等）全是 HttpOnly，网页脚本根本拿不到；只种入书签能看到的那半套，官网用户信息接口不认、续期接口回「inner token失效」并让 SDK 清空令牌，所以导入一定报「官网没有认出这份登录态」。现改为和北京模块同样的做法：在自己电脑浏览器的开发者工具 Network 里点开任一 `yangshipin.cn` 请求，复制 Request Headers 中 `Cookie` 的完整值粘贴导入（请求头包含 HttpOnly 那层）；种入完整 Cookie 后官网当场认出账号与 VIP，已实测。书签工具已从卡片移除；粘错来源（只有 ysp_* 令牌）时解析阶段就会说明缺的是 HttpOnly 会话 cookie，不再白起一次浏览器。导入失败时服务端日志会记下种入了哪些 cookie、官网账号接口的每次回包（路径、状态、返回码）和校验后剩余的 cookie，报错文案按原因区分（续期被拒 / 用户信息接口不认 / 缺会话 cookie）。「央视频会员频道登录教程」短片同步改版为开发者工具复制 Cookie 的六步演示
 
 ### v4.11.0 (2026-09-06)

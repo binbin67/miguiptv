@@ -117,6 +117,7 @@ let announcedExecutable = ''
  */
 export async function launchWithFallback({
   headless = true,
+  launchOptions = {},
   launchImpl = opts => puppeteer.launch(opts),
   env = process.env,
   platform = process.platform,
@@ -134,7 +135,16 @@ export async function launchWithFallback({
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i]
     try {
-      const browser = await launchImpl({ headless, args: [...BASE_ARGS, ...platformArgs(exists)], timeout: LAUNCH_TIMEOUT_MS, ...candidate.opts })
+      // userDataDir / protocolTimeout / defaultViewport 等由确实需要持久浏览器会话的
+      // 模块传入；基础安全/容器参数仍由本层统一保留，调用方不能无意覆盖掉。
+      const extraArgs = Array.isArray(launchOptions.args) ? launchOptions.args : []
+      const browser = await launchImpl({
+        ...launchOptions,
+        headless,
+        args: [...BASE_ARGS, ...platformArgs(exists), ...extraArgs],
+        timeout: launchOptions.timeout ?? LAUNCH_TIMEOUT_MS,
+        ...candidate.opts,
+      })
       if (candidate.opts.executablePath && announcedExecutable !== candidate.opts.executablePath) {
         announcedExecutable = candidate.opts.executablePath
         printBlue(`使用浏览器: ${candidate.opts.executablePath}`)
@@ -291,13 +301,14 @@ export function getBrowserPool() {
  * @param {string} [options.label]
  * @param {number} [options.waitMs]
  * @param {() => Promise<boolean>} [options.onIdleRequest]
+ * @param {object} [options.launchOptions] 受控附加选项（如专用 userDataDir）
  * @param {(opts: object) => Promise<import('puppeteer').Browser>} [options.launchImpl] 测试注入
  */
-export async function launchBrowser({ headless = true, label = '浏览器', waitMs, onIdleRequest, launchImpl } = {}) {
+export async function launchBrowser({ headless = true, label = '浏览器', waitMs, onIdleRequest, launchOptions, launchImpl } = {}) {
   const slot = await pool.acquire({ label, waitMs, onIdleRequest })
   let browser
   try {
-    browser = await launchWithFallback({ headless, launchImpl })
+    browser = await launchWithFallback({ headless, launchOptions, launchImpl })
   } catch (err) {
     slot.release()
     throw err

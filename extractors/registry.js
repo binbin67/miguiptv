@@ -21,6 +21,8 @@
  *                                 'standard'（免账号的普通官方抓取模块）
  *   capabilities          object  { cache: 'disk'|'memory'|'none',
  *                                   resolve: boolean, epg: boolean }
+ *   catalogVersion        number  可选；代码内置频道表变更时递增。缓存版本不一致会在
+ *                                 启动生成播放列表前主动重抓，成功后才写入新版本
  *   defaultRefreshMinutes number  默认刷新间隔
  *   minRefreshMinutes     number  可选；用户可配置的最小刷新间隔
  *   maxRefreshMinutes     number  可选；用户可配置的最大刷新间隔
@@ -70,6 +72,14 @@
  *
  *   clearResolveCache()
  *       可选。画质等参数变更后由 utils/appUtils.js 的 clearUrlCache 统一触发。
+ *
+ *   claimsLocalPath(path) → boolean + async handleLocalRequest(ctx) → response
+ *       可选成对实现。供需要把进程内媒体 Buffer 作为 HLS 输出的模块使用；普通
+ *       上游 HLS 不要走这里。ctx: { path, method, headers, accessPrefix }，response:
+ *       { status, headers, body }。app.js 仍统一负责访问鉴权与 HTTP 写出。
+ *
+ *   async shutdown()
+ *       可选。关闭模块持有的浏览器/页面等资源；服务重启与 SIGTERM 时调用。
  *
  *   async epg(channels, ctx) → XMLTV 片段
  *       可选，capabilities.epg 为真时必需。槽位先留着，本轮无人实现。
@@ -172,11 +182,20 @@ export function validateModule(module) {
   if (module.category != null && !MODULE_CATEGORIES.has(module.category)) {
     throw new Error(`抓取模块 ${module.id} 的 category 非法: ${JSON.stringify(module.category)}`)
   }
+  if (module.catalogVersion != null
+    && (!Number.isInteger(module.catalogVersion) || module.catalogVersion < 1)) {
+    throw new Error(`抓取模块 ${module.id} 的 catalogVersion 必须是正整数`)
+  }
   if (module.capabilities?.resolve && typeof module.resolve !== 'function') {
     throw new Error(`抓取模块 ${module.id} 声明了 resolve 能力但没实现 resolve()`)
   }
   if (module.channelHlsMode != null && !['proxy', 'relay'].includes(module.channelHlsMode)) {
     throw new Error(`抓取模块 ${module.id} 的 channelHlsMode 非法: ${JSON.stringify(module.channelHlsMode)}`)
+  }
+  const hasLocalClaim = typeof module.claimsLocalPath === 'function'
+  const hasLocalHandler = typeof module.handleLocalRequest === 'function'
+  if (hasLocalClaim !== hasLocalHandler) {
+    throw new Error(`抓取模块 ${module.id} 的 claimsLocalPath/handleLocalRequest 必须成对实现`)
   }
   for (const field of module.configSchema || []) {
     // 单选 / 多选都必须给出可选值，否则校验层无从判断合法性
@@ -228,6 +247,22 @@ export function resolverFor(ref) {
     if (typeof module.claimsRef === 'function' && module.claimsRef(ref)) return module
   }
   return null
+}
+
+/** 找出哪个模块认领本机媒体路径；只做路由，不在注册表里放平台正则。 */
+export function localRequestHandlerFor(path) {
+  for (const module of registry.values()) {
+    if (typeof module.claimsLocalPath === 'function' && module.claimsLocalPath(path)) return module
+  }
+  return null
+}
+
+/** 服务退出前清理所有模块持有的浏览器等长生命周期资源。 */
+export async function shutdownModules() {
+  await Promise.allSettled([...registry.values()]
+    .filter(module => typeof module.shutdown === 'function')
+    // Promise.resolve().then 同时兜住同步 throw；一个模块清理失败不能妨碍其余模块退出。
+    .map(module => Promise.resolve().then(() => module.shutdown())))
 }
 
 /** 频道归属标记。改这里要同步 app.js 的 sourceId 正则白名单与源枚举。 */

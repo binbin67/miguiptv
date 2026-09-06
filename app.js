@@ -1,5 +1,5 @@
 import http from "node:http"
-import { resolverFor } from './extractors/registry.js'
+import { localRequestHandlerFor, resolverFor, shutdownModules } from './extractors/registry.js'
 import { pipeFlv } from './utils/flvProxy.js'
 import { readFileSync, mkdirSync, existsSync } from "node:fs"
 import { createRequire } from "node:module"
@@ -13,7 +13,9 @@ import { toProxyManifest, lookup as lookupProxyTarget, pipeUpstream, probeUpstre
 import { dataPath } from "./utils/paths.js";
 import { getExtractorManager, getModuleConfig } from "./utils/extractorManager.js";
 import { getExtractorsAPI, startModuleLoginAPI, pollModuleLoginAPI, setExtractorEnabledAPI,
-  updateExtractorConfigAPI, runExtractorNowAPI, setContentFlagAPI } from "./utils/extractorsAPI.js";
+  updateExtractorConfigAPI, runExtractorNowAPI, setContentFlagAPI, startBrowserLoginAPI,
+  getBrowserLoginStatusAPI, checkBrowserLoginAPI, cancelBrowserLoginAPI,
+  closeBrowserLoginAPI } from "./utils/extractorsAPI.js";
 import { getChannelsAPI, getExternalSourcesAPI, saveExternalSourcesAPI,
          addExternalSourceAPI, removeExternalSourceAPI, updateExternalSourceAPI,
          setExternalSourceM3u8API, importSubscriptionAPI, parseLocalContentAPI,
@@ -52,6 +54,33 @@ function clientOf(req) {
   const ip = (req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '?').replace(/^::ffff:/, '')
   const ua = String(req.headers['user-agent'] || '无UA').replace(/[\r\n]/g, ' ')
   return { ip, key: `${ip}|${ua.slice(0, 120)}`, tag: `${ip} UA:${ua.slice(0, 80)}` }
+}
+
+/**
+ * 可见浏览器窗口会出现在“运行本服务的电脑”上，不是访问后台的远端设备上。
+ * 只有“弹出可见登录窗口”必须来自 loopback；查看/校验已有 profile、取消流程和
+ * 关闭后台会话仍可由正常后台远程管理。Host 也必须是 loopback，避免反代在无
+ * Origin 的请求里把远端连接伪装成本机 socket。
+ */
+function isLocalBrowserLoginRequest(req) {
+  const isLoopbackHost = value => ['localhost', '127.0.0.1', '::1', '[::1]']
+    .includes(String(value || '').toLowerCase())
+  const remote = String(req.socket?.remoteAddress || '').replace(/^::ffff:/, '')
+  if (remote !== '127.0.0.1' && remote !== '::1') return false
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim().replace(/^::ffff:/, '')
+  if (forwarded && forwarded !== '127.0.0.1' && forwarded !== '::1') return false
+  try {
+    if (!isLoopbackHost(new URL(`http://${String(req.headers.host || '')}`).hostname)) return false
+  } catch {
+    return false
+  }
+  const origin = String(req.headers.origin || '')
+  if (!origin) return true
+  try {
+    return isLoopbackHost(new URL(origin).hostname)
+  } catch {
+    return false
+  }
 }
 
 const proxyStats = new Map()   // pid|client -> { head, get, ok, since }  自该客户端上一条清单日志以来的计数
@@ -335,7 +364,7 @@ async function handleRequest(req, res) {
       // 依赖外部守护进程（Docker restart:always / pm2 / systemd）重新启动。
       setTimeout(() => {
         printMagenta("正在退出进程，等待守护进程（Docker/pm2/systemd）拉起...")
-        process.exit(0)
+        void shutdownProcess()
       }, 2000)
       return
     }
@@ -547,6 +576,15 @@ async function handleRequest(req, res) {
     if (routePath === '/api/extractors' && method === 'POST') {
       try {
         const data = JSON.parse(await readBody(req))
+        if (data.action === 'browserLoginStart' && !isLocalBrowserLoginRequest(req)) {
+          res.writeHead(403, { 'Content-Type': 'application/json;charset=UTF-8' })
+          res.end(JSON.stringify({
+            success: false,
+            code: 'LOCAL_BROWSER_LOGIN_ONLY',
+            message: '自动浏览器登录仅允许从服务所在电脑的 localhost 后台操作',
+          }))
+          return
+        }
         let result
         switch (data.action) {
           case 'loginStart':
@@ -554,6 +592,21 @@ async function handleRequest(req, res) {
             break
           case 'loginPoll':
             result = await pollModuleLoginAPI(data.id, data.key)
+            break
+          case 'browserLoginStart':
+            result = await startBrowserLoginAPI(data.id)
+            break
+          case 'browserLoginStatus':
+            result = await getBrowserLoginStatusAPI(data.id)
+            break
+          case 'browserLoginCheck':
+            result = await checkBrowserLoginAPI(data.id)
+            break
+          case 'browserLoginCancel':
+            result = await cancelBrowserLoginAPI(data.id)
+            break
+          case 'browserLoginClose':
+            result = await closeBrowserLoginAPI(data.id)
             break
           case 'toggleModule':
             result = setExtractorEnabledAPI(data.id, data.enabled !== false)
@@ -1070,6 +1123,31 @@ async function handleRequest(req, res) {
     routeUrl = `${proxyMatch[1]}/${proxyMatch[2]}${proxyMatch[3]}`
   }
 
+  // 模块自产的本机媒体（当前用于央视频 VIP 解扰后的 fMP4 HLS）。它不是上游 URL，
+  // 不能塞给 hlsProxy 去 fetch。此处已经完成站长密码/用户令牌鉴权及 relay/proxy
+  // 外壳剥离，但还没把旧 /userId/token 段误拆掉，模块因此能兼容所有入口形态。
+  const localMediaPath = routeUrl.split('?')[0]
+  const localMediaModule = localRequestHandlerFor(localMediaPath)
+  if (localMediaModule) {
+    const local = await localMediaModule.handleLocalRequest({
+      path: localMediaPath,
+      method,
+      headers,
+      accessPrefix,
+    })
+    if (local) {
+      res.writeHead(local.status || 200, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': '*',
+        ...(local.headers || {}),
+      })
+      if (method === 'HEAD') res.end()
+      else res.end(local.body)
+      return
+    }
+  }
+
   // 带 relay/proxy 段却没被上面任何一条路由认出（播放器把清单地址当目录拼相对路径、
   // 多余斜杠等畸形解析）：必须 404 收口。落到下方账号段解析会把 relay/proxy 误当
   // userId、返回整份订阅 + HTTP 200——播放器拿订阅文本当分片解码必失败且全程无痕。
@@ -1271,6 +1349,25 @@ const server = http.createServer((req, res) => {
     } catch { /* 连接可能已断 */ }
   })
 })
+
+let shutdownTask = null
+function shutdownProcess() {
+  if (shutdownTask) return shutdownTask
+  shutdownTask = (async () => {
+    // 先停止接收新连接，再释放专用 Chrome profile；清理最多等 8 秒，不能让
+    // 守护进程的重启因为浏览器异常关闭而无限挂住。
+    try { server.close() } catch { /* 尚未监听或已经关闭 */ }
+    await Promise.race([
+      shutdownModules(),
+      new Promise(resolve => setTimeout(resolve, 8_000)),
+    ])
+    process.exit(0)
+  })()
+  return shutdownTask
+}
+
+process.once('SIGINT', () => { void shutdownProcess() })
+process.once('SIGTERM', () => { void shutdownProcess() })
 
 // Node 默认 keepAliveTimeout 5 秒，而直播媒体清单 TARGETDURATION=6 秒——简易播放器复用
 // 刚被服务端 FIN 掉的连接会撞 RST（issue #98 H5）。拉长到 65 秒覆盖轮询节拍；

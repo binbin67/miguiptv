@@ -3410,6 +3410,21 @@
                     <div style="font-size:12px; color:#888; margin-top:6px;">用 B 站手机 App 扫一下即可，凭据直接存到服务端、不经过这个页面。下面的输入框留空即不修改已保存的凭据。</div>
                 </div>`;
             }
+            if (key === 'yangshipin-login') {
+                return `<div class="bookmarklet-section" style="margin:0 0 12px;">
+                    <div class="bookmarklet-title">
+                        <span>🔑</span><span>央视频账号</span>
+                        <span id="yspLoginState" class="login-state-badge off">正在检查登录态…</span>
+                    </div>
+                    <div class="bookmarklet-actions">
+                        <button id="yspLoginOpen" class="btn btn-sm btn-primary" onclick="startYspBrowserLogin()">打开央视频官方登录窗口</button>
+                        <button id="yspLoginCancel" class="btn btn-sm" style="display:none;" onclick="cancelYspBrowserLogin()">取消登录</button>
+                        <button id="yspLoginCheck" class="btn btn-sm" onclick="checkYspBrowserLogin()">检查登录态</button>
+                        <button id="yspLoginClose" class="btn btn-sm" onclick="closeYspBrowserSession()">关闭后台浏览器</button>
+                    </div>
+                    <div id="yspLoginMessage" style="font-size:12px; color:#888; margin-top:8px; line-height:1.7;">登录态保存在服务端数据目录的专用浏览器 profile；10 个会员频道共用，无需逐台导入。自动弹窗只支持从运行服务的电脑本机访问 localhost 后台，Docker/NAS 无桌面环境暂不支持。</div>
+                </div>`;
+            }
             if (key === 'beijing-cookie') {
                 const loggedIn = !!(secretsSet && secretsSet.cookie);
                 return `<div class="bookmarklet-section" style="margin:0 0 12px;">
@@ -3594,6 +3609,7 @@
 
         /** 点卡片：在居中弹窗中打开该模块的配置或运行详情。 */
         function selectExtractorModule(id) {
+            if (id !== 'yangshipin') stopYspLoginPolling();
             selectedExtractorId = id;
             renderExtractors();
             const modal = document.getElementById('extractorDetailModal');
@@ -3622,6 +3638,7 @@
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
             }
+            stopYspLoginPolling();
             selectedExtractorId = null;
             renderExtractors();
         }
@@ -3695,6 +3712,7 @@
             initMiguBookmarklet();
             initFengshowsBookmarklet();
             initSichuanBookmarklet();
+            initYspLoginHelper();
             // 记录本次渲染的初始值，保存时只提交用户改过的字段（见函数注释）
             captureExtractorInitialValues(m);
 
@@ -3768,6 +3786,178 @@
             const r = await extractorPost(body);
             if (r && r.success) setSaveDirty(`xt:${id}`, false);
             applyExtractorResult(r, '配置已保存。改动需要重新抓取才生效——点「立即刷新」，或等下一轮自动刷新');
+        }
+
+        // ===== 央视频持久浏览器登录 =====
+        // 与 B 站二维码不同：凭据始终留在服务端专用 Chromium profile，后台只拿
+        // 状态快照。服务端负责监听登录成功并把可见窗口切回后台会话。
+        let yspLoginTimer = null;
+        let yspLoginGen = 0;
+        let yspLoginFailStreak = 0;
+        const yspLoginLocalPage = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
+
+        function stopYspLoginPolling(invalidate = true) {
+            if (yspLoginTimer) { clearTimeout(yspLoginTimer); yspLoginTimer = null; }
+            if (invalidate) yspLoginGen++;
+        }
+
+        function renderYspLoginError(message, unavailable = false) {
+            const state = document.getElementById('yspLoginState');
+            const detail = document.getElementById('yspLoginMessage');
+            const open = document.getElementById('yspLoginOpen');
+            const cancel = document.getElementById('yspLoginCancel');
+            const check = document.getElementById('yspLoginCheck');
+            const close = document.getElementById('yspLoginClose');
+            if (state) {
+                state.textContent = unavailable ? '仅可在服务本机登录' : '无法读取登录态';
+                state.className = 'login-state-badge off';
+            }
+            if (detail) { detail.textContent = message || '操作失败'; detail.style.color = '#ff4d4f'; }
+            if (unavailable) {
+                if (open) open.disabled = true;
+                if (cancel) cancel.style.display = 'none';
+                if (check) check.disabled = true;
+                if (close) close.disabled = true;
+            }
+        }
+
+        function isYspLoginLocalOnlyError(result) {
+            return result && result.code === 'LOCAL_BROWSER_LOGIN_ONLY';
+        }
+
+        function renderYspLoginState(data) {
+            const state = document.getElementById('yspLoginState');
+            const detail = document.getElementById('yspLoginMessage');
+            const open = document.getElementById('yspLoginOpen');
+            const cancel = document.getElementById('yspLoginCancel');
+            const check = document.getElementById('yspLoginCheck');
+            const close = document.getElementById('yspLoginClose');
+            if (!state || !detail) return;
+
+            const active = data && data.active === true;
+            const account = data && data.account;
+            const authenticated = !!(data && data.authenticated && account);
+            const available = !data || data.available !== false;
+            const canOpenWindow = available && yspLoginLocalPage;
+            let label = '未登录（会员频道会提示登录）';
+            let className = 'login-state-badge off';
+            if (active) {
+                label = data.status === 'restoring' ? '正在恢复后台会话…' : '等待官网登录…';
+            } else if (authenticated && account.vip) {
+                label = `✅ ${account.nickname || '已登录'} · VIP 有效`;
+                className = 'login-state-badge on';
+            } else if (authenticated) {
+                label = `⚠️ ${account.nickname || '已登录'} · 未识别 VIP`;
+            } else if (!available) {
+                label = '当前环境无法弹出登录窗';
+            } else if (!yspLoginLocalPage && !authenticated) {
+                label = '首次登录请在服务本机操作';
+            }
+            state.textContent = label;
+            state.className = className;
+            detail.textContent = (data && (available
+                ? (data.message || data.reason)
+                : (data.reason || data.message))) || '尚未检测到有效央视频登录态。';
+            if (!yspLoginLocalPage && available) {
+                detail.textContent += ' 如需打开登录窗口，请在运行服务的电脑上用 localhost 访问后台。';
+            }
+            detail.style.color = (data && data.status === 'error') || !available ? '#ff4d4f' : '#888';
+            if (open) {
+                open.disabled = active || !canOpenWindow;
+                open.textContent = authenticated ? '检查/恢复央视频登录' : '打开央视频官方登录窗口';
+            }
+            if (cancel) cancel.style.display = active ? '' : 'none';
+            if (check) check.disabled = active;
+            if (close) close.disabled = active || !(data && data.running);
+        }
+
+        async function pollYspBrowserLogin(gen) {
+            if (gen !== yspLoginGen || selectedExtractorId !== 'yangshipin') return;
+            let r = null;
+            try { r = await extractorPost({ action: 'browserLoginStatus', id: 'yangshipin' }); }
+            catch (e) { r = null; }
+            if (gen !== yspLoginGen || selectedExtractorId !== 'yangshipin') return;
+            if (!r || !r.success) {
+                if (isYspLoginLocalOnlyError(r)) {
+                    renderYspLoginError(r.message, true);
+                    return;
+                }
+                yspLoginFailStreak++;
+                if (yspLoginFailStreak <= 5) {
+                    const detail = document.getElementById('yspLoginMessage');
+                    if (detail) { detail.textContent = '登录状态查询遇到网络波动，正在重试…'; detail.style.color = '#faad14'; }
+                    yspLoginTimer = setTimeout(() => pollYspBrowserLogin(gen), 1500);
+                } else renderYspLoginError((r && r.message) || '登录状态查询失败');
+                return;
+            }
+            yspLoginFailStreak = 0;
+            renderYspLoginState(r.data || {});
+            if (r.data && r.data.active) yspLoginTimer = setTimeout(() => pollYspBrowserLogin(gen), 1000);
+            else yspLoginTimer = null;
+        }
+
+        function initYspLoginHelper() {
+            const state = document.getElementById('yspLoginState');
+            if (!state || selectedExtractorId !== 'yangshipin' || state.dataset.initialized === '1') return;
+            state.dataset.initialized = '1';
+            checkYspBrowserLogin(true);
+        }
+
+        async function checkYspBrowserLogin(quiet = false) {
+            stopYspLoginPolling();
+            const gen = yspLoginGen;
+            const detail = document.getElementById('yspLoginMessage');
+            if (detail) { detail.textContent = '正在用已保存的 profile 检查央视频登录态…'; detail.style.color = '#888'; }
+            let r = null;
+            try { r = await extractorPost({ action: 'browserLoginCheck', id: 'yangshipin' }); }
+            catch (e) { r = null; }
+            if (gen !== yspLoginGen || selectedExtractorId !== 'yangshipin') return;
+            if (!r || !r.success) {
+                renderYspLoginError((r && r.message) || '检查登录态失败', isYspLoginLocalOnlyError(r));
+                if (!quiet) showStatus((r && r.message) || '检查登录态失败', 'error');
+                return;
+            }
+            renderYspLoginState(r.data || {});
+            if (r.data && r.data.active) pollYspBrowserLogin(gen);
+            if (!quiet) showStatus(r.data?.authenticated ? '央视频登录态有效' : '尚未检测到央视频登录', r.data?.authenticated ? 'success' : 'error');
+        }
+
+        async function startYspBrowserLogin() {
+            stopYspLoginPolling();
+            const gen = yspLoginGen;
+            let r = null;
+            try { r = await extractorPost({ action: 'browserLoginStart', id: 'yangshipin' }); }
+            catch (e) { r = null; }
+            if (gen !== yspLoginGen || selectedExtractorId !== 'yangshipin') return;
+            if (!r || !r.success) {
+                renderYspLoginError((r && r.message) || '无法打开央视频登录窗口', isYspLoginLocalOnlyError(r));
+                showStatus((r && r.message) || '无法打开央视频登录窗口', 'error');
+                return;
+            }
+            renderYspLoginState(r.data || {});
+            yspLoginFailStreak = 0;
+            if (r.data && r.data.active) pollYspBrowserLogin(gen);
+        }
+
+        async function cancelYspBrowserLogin() {
+            stopYspLoginPolling();
+            const gen = yspLoginGen;
+            const r = await extractorPost({ action: 'browserLoginCancel', id: 'yangshipin' }).catch(() => null);
+            if (gen !== yspLoginGen || selectedExtractorId !== 'yangshipin') return;
+            if (!r || !r.success) return renderYspLoginError(
+                (r && r.message) || '取消登录失败', isYspLoginLocalOnlyError(r));
+            renderYspLoginState(r.data || {});
+        }
+
+        async function closeYspBrowserSession() {
+            stopYspLoginPolling();
+            const gen = yspLoginGen;
+            const r = await extractorPost({ action: 'browserLoginClose', id: 'yangshipin' }).catch(() => null);
+            if (gen !== yspLoginGen || selectedExtractorId !== 'yangshipin') return;
+            if (!r || !r.success) return renderYspLoginError(
+                (r && r.message) || '关闭后台浏览器失败', isYspLoginLocalOnlyError(r));
+            renderYspLoginState(r.data || {});
+            showStatus('央视频后台浏览器已关闭；下次播放会按需恢复', 'success');
         }
 
         // ===== B 站扫码登录 =====

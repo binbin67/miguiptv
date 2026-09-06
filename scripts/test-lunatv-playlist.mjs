@@ -62,7 +62,7 @@ try {
       for (const relay of ['', '1', '2']) {
         const output = String(interfaceStr(path, { host: 'localhost:1905' }, '', '', profile, '/u/test-token', relay).content)
         const channels = lunaChannels(output)
-        assert.equal(channels.filter(channel => channel.url.includes('/ysp-')).length, 63)
+        assert.equal(channels.filter(channel => channel.url.includes('/ysp-')).length, 73)
         assert.equal(channels.filter(channel => /\/(?:huya|douyu)-/.test(channel.url)).length, 2)
         assert.ok(channels.every(channel => channel.url.startsWith('http://localhost:1905/u/test-token/')))
         assert.ok(output.includes(biliBlock), '保留 B站完整请求头，不能为了导入而制造无法播放的直链')
@@ -87,7 +87,7 @@ try {
     assert.equal(omitPlayerOnlyOpts(input), input)
   }
   assert.equal(omitPlayerOnlyOpts(omitPlayerOnlyOpts(cached)), omitPlayerOnlyOpts(cached))
-  console.log('LunaTV 订阅回归通过：63 个央视频 + 虎牙/斗鱼、旧缓存、配置档、全部 M3U 入口、鉴权前缀与代理模式；B站请求头保留')
+  console.log('LunaTV 订阅回归通过：63 个公开 + 10 个会员央视频频道、虎牙/斗鱼、旧缓存、配置档、全部 M3U 入口、鉴权前缀与代理模式；B站请求头保留')
 } finally {
   rmSync(dir, { recursive: true, force: true })
 }

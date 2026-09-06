@@ -44,6 +44,25 @@ await check('启动参数带 Docker 必备的 --disable-dev-shm-usage 且关闭�
   assert.ok(BASE_ARGS.includes('--autoplay-policy=no-user-gesture-required'))
 })
 
+await check('持久会话附加 userDataDir 时仍保留统一基础参数', async () => {
+  let seen
+  await launchWithFallback({
+    env: {}, platform: 'unknown', exists: () => false,
+    launchOptions: {
+      userDataDir: '/tmp/dedicated-profile',
+      protocolTimeout: 12_345,
+      defaultViewport: { width: 800, height: 600 },
+      args: ['--window-size=800,600'],
+    },
+    launchImpl: async opts => { seen = opts; return new FakeBrowser() },
+  })
+  assert.equal(seen.userDataDir, '/tmp/dedicated-profile')
+  assert.equal(seen.protocolTimeout, 12_345)
+  assert.deepEqual(seen.defaultViewport, { width: 800, height: 600 })
+  assert.ok(seen.args.includes('--disable-dev-shm-usage'))
+  assert.ok(seen.args.includes('--window-size=800,600'))
+})
+
 await check('Alpine（Docker 镜像）才加 --js-flags=--stack-size=96，其它平台不加；启动时真的带上', async () => {
   const onAlpine = (p) => p === '/etc/alpine-release'
   assert.deepEqual(platformArgs(onAlpine), ['--js-flags=--stack-size=96'])

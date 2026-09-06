@@ -1,5 +1,5 @@
 /**
- * 央视频匿名直播接口当前稳定开放的频道；拿不到匿名地址的付费专区不混入公开频道表。
+ * 央视频匿名直播接口当前稳定开放的公开频道。
  *
  * 未收录的 10 个剧场类频道（世界地理、风云音乐、兵器科技、风云足球、高尔夫·网球、
  * 女性时尚、央视文化精品、央视台球、电视指南、卫生健康）匿名一律回 iretcode=25
@@ -7,7 +7,7 @@
  * 12 种清晰度档位、logintype 取 0/1/2、getpreviewinfo、sphttps，以及 cKey 包体里的
  * uid（换随机值/纯数字/空串都不影响结果，服务端根本不校验它）。服务端错误码是精确
  * 区分的（cmd 传错会回 21「无效命令字」），所以 25 就是字面意思：缺的是登录态本身。
- * 要收录这批频道，只能补真实登录凭证，且凭证在 HTTP 参数或 Cookie 层，不在 cKey 里。
+ * 这 10 个频道现由下方 AUTH_CHANNELS + 官网浏览器会话承载，不会误走匿名接口。
  *
  * 第四列是该频道唯一被接口接受的清晰度档：绝大多数频道走 fhd，少数只认 shd，
  * 档位报错时接口一律回 iretcode=25「无登录信息」，不会降级重试，所以必须逐频道写死。
@@ -78,12 +78,45 @@ export const CHANNELS = [
   ['xjws', '新疆卫视', '2019927403', '600152138'],
 ].map(([id, name, channelId, livePid, defn = 'fhd']) => Object.freeze({ id, name, channelId, livePid, defn }))
 
+/**
+ * 需要央视频登录且通常需要 VIP 权益的频道。它们使用独立 ysp-vip-* ref，避免
+ * 被匿名 resolver 接走；siteName 是央视频官网频道列表中的点击名称。
+ */
+export const AUTH_CHANNELS = [
+  ['cctvsjdl', 'CCTV世界地理', '2026874403', '600099637', 'fhd', 'CCTV世界地理频道'],
+  ['cctvfyyl', 'CCTV风云音乐', '2026874503', '600099660', 'fhd', 'CCTV风云音乐频道'],
+  ['cctvbqkj', 'CCTV兵器科技', '2026874603', '600099649', 'fhd', 'CCTV兵器科技频道'],
+  ['cctvfyzq', 'CCTV风云足球', '2026966203', '600099636', 'fhd', 'CCTV风云足球频道'],
+  ['cctvgfew', 'CCTV高尔夫·网球', '2026874703', '600099659', 'fhd', 'CCTV高尔夫·网球频道'],
+  ['cctvnxss', 'CCTV女性时尚', '2026874803', '600099650', 'fhd', 'CCTV女性时尚频道'],
+  ['cctvwhjp', 'CCTV央视文化精品', '2026874903', '600099653', 'fhd', 'CCTV央视文化精品频道'],
+  ['cctvtq', 'CCTV央视台球', '2026875003', '600099652', 'fhd', 'CCTV央视台球频道'],
+  ['cctvdszn', 'CCTV电视指南', '2026875103', '600099656', 'fhd', 'CCTV电视指南频道'],
+  ['cctvwsjk', 'CCTV卫生健康', '2025637003', '600099651', 'fhd', 'CCTV卫生健康频道'],
+].map(([id, name, channelId, livePid, defn, siteName]) => Object.freeze({
+  id, name, channelId, livePid, defn, siteName,
+}))
+
 export const CHANNEL_BY_REF = new Map(CHANNELS.map(channel => [`ysp-${channel.id}`, channel]))
+export const AUTH_CHANNEL_BY_REF = new Map(AUTH_CHANNELS.map(channel => [`ysp-vip-${channel.id}`, channel]))
+export const AUTH_CHANNEL_BY_ID = new Map(AUTH_CHANNELS.map(channel => [channel.id, channel]))
+
+export function claimsRef(ref) {
+  const key = String(ref || '')
+  return CHANNEL_BY_REF.has(key) || AUTH_CHANNEL_BY_REF.has(key)
+}
 
 export function buildChannels() {
-  return CHANNELS.map(channel => ({
+  const publicChannels = CHANNELS.map(channel => ({
     name: channel.name,
     deferredRef: `ysp-${channel.id}`,
     logo: '',
   }))
+  const vipChannels = AUTH_CHANNELS.map(channel => ({
+    name: channel.name,
+    deferredRef: `ysp-vip-${channel.id}`,
+    logo: '',
+    opts: ['network-caching=3000'],
+  }))
+  return [...publicChannels, ...vipChannels]
 }

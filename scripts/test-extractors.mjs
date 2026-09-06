@@ -344,6 +344,20 @@ check('select / multiselect 没有 options 会在启动期被拒绝', () => {
   validateModule(withField({ key: 'x', type: 'multiselect', label: 'x', options: [{ value: 1, label: 'a' }] }))
 })
 
+check('本机媒体路由声明必须成对，避免认领后没有响应处理器', () => {
+  const base = { id: 'probe', name: 'probe', fetch: async () => ({ groups: [] }) }
+  assert.throws(() => validateModule({ ...base, claimsLocalPath: () => true }), /必须成对实现/)
+  assert.throws(() => validateModule({ ...base, handleLocalRequest: async () => ({}) }), /必须成对实现/)
+  validateModule({ ...base, claimsLocalPath: () => true, handleLocalRequest: async () => ({ status: 200 }) })
+})
+
+check('频道表缓存版本只接受正整数，避免每次启动都误判过期', () => {
+  const base = { id: 'probe', name: 'probe', fetch: async () => ({ groups: [] }) }
+  assert.throws(() => validateModule({ ...base, catalogVersion: 0 }), /正整数/)
+  assert.throws(() => validateModule({ ...base, catalogVersion: '2' }), /正整数/)
+  validateModule({ ...base, catalogVersion: 2 })
+})
+
 check('normalizeGroups 挡住畸形返回，不让一个坏模块搞崩整轮合并', () => {
   assert.deepEqual(normalizeGroups(null), [])
   assert.deepEqual(normalizeGroups('nope'), [])
@@ -657,7 +671,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'iptv-extractors-test-'))
 // 每个用例一份独立的配置/缓存文件：共用一份的话，前一个用例存下的开关状态
 // 会污染后一个（比如前一个用例关掉的模块开关会被后一个读到）
 let caseSeq = 0
-const newManager = (legacy, extractorConfig) => {
+const newManager = (legacy, extractorConfig, extractorCache) => {
   const seq = ++caseSeq
   const manager = new ExtractorManager()
   manager.configPath = join(tmp, `extractors-${seq}.json`)
@@ -665,6 +679,7 @@ const newManager = (legacy, extractorConfig) => {
   // 指向测试自己的旧配置，避免读到仓库根目录里用户的真实 system-config.json
   manager.legacyConfigPath = join(tmp, `system-config-${seq}.json`)
   if (extractorConfig !== undefined) writeFileSync(manager.configPath, JSON.stringify(extractorConfig))
+  if (extractorCache !== undefined) writeFileSync(manager.cachePath, JSON.stringify(extractorCache))
   if (legacy !== undefined) writeFileSync(manager.legacyConfigPath, JSON.stringify(legacy))
   return manager.load()
 }
@@ -764,23 +779,25 @@ try {
     const migu = modules.find(m => m.id === 'migu')
     const bili = modules.find(m => m.id === 'bilibili-live')
     const sichuan = modules.find(m => m.id === 'sichuan')
+    const ysp = modules.find(m => m.id === 'yangshipin')
     assert.equal(migu.helper, 'migu-bookmarklet')
     assert.equal(migu.helperSection, '', '没声明 helperSection 的渲染在表单最上面（咪咕就是）')
     assert.equal(bili.helper, 'bilibili-login', 'B 站的扫码登录助手')
     assert.equal(bili.helperSection, '登录态（选填）', '助手要挂在它自己那一段，不是表单最上面')
     assert.equal(sichuan.helper, 'sichuan-token', '四川模块应提供官网登录态提取助手')
     assert.equal(sichuan.helperSection, '四川官网登录', '四川助手应和 Token 输入框位于同一段')
+    assert.equal(ysp.helper, 'yangshipin-login', '央视频模块应提供持久浏览器登录助手')
+    assert.equal(typeof getModule('yangshipin').browserLoginFlow?.start, 'function')
   })
 
   check('模块分类透传给后台，未声明的模块默认归入免账号分类', () => {
     const modules = newManager().getState().modules
-    for (const id of ['migu', 'beijing', 'fengshows', 'sichuan']) {
+    for (const id of ['migu', 'beijing', 'fengshows', 'sichuan', 'yangshipin']) {
       assert.equal(modules.find(module => module.id === id)?.category, 'account', `${id} 应归入账号与授权`)
     }
     for (const id of ['bilibili-live', 'huya-live', 'douyu-live']) {
       assert.equal(modules.find(module => module.id === id)?.category, 'live', `${id} 应归入网络直播平台`)
     }
-    assert.equal(modules.find(module => module.id === 'yangshipin')?.category, 'standard', '央视频公开频道免登录')
   })
 
   check('★ 所有非代理抓取模块首次出现默认开启，显式关闭后保持关闭', () => {
@@ -983,6 +1000,34 @@ try {
     manager.updateModuleConfig('bilibili-live', { rooms: '13' })
     const module = manager.getState().modules.find(m => m.id === 'bilibili-live')
     assert.equal(module.health.lastSuccessAt, null, '配置变了，上一轮结果不再代表当前配置')
+  })
+
+  await checkAsync('内置频道表升级后启动即重建旧缓存，成功才记录新版本', async () => {
+    const oldUpdatedAt = Date.now()
+    const manager = newManager(undefined, undefined, {
+      modules: {
+        yangshipin: {
+          groups: [{ name: '央视频', dataList: [{ name: '旧缓存频道', deferredRef: 'ysp-cctv1' }] }],
+          health: { ...emptyHealth(), status: 'ok', lastSuccessAt: oldUpdatedAt, channelCount: 1 },
+        },
+      },
+    })
+    assert.equal(manager.cache.modules.yangshipin.health.lastSuccessAt, null,
+      '缺少 catalogVersion 的旧缓存要立即到期')
+    // 其余新模块也没有缓存；标为本进程已尝试，隔离本用例并避免真实网络请求。
+    for (const module of listModules()) {
+      if (module.id !== 'yangshipin') manager.attempted.add(module.id)
+    }
+    const result = await manager.ensureWarm()
+    assert.equal(result.results.length, 1)
+    assert.equal(result.results[0].id, 'yangshipin')
+    assert.equal(result.results[0].success, true)
+    const channels = manager.cache.modules.yangshipin.groups.flatMap(group => group.dataList || [])
+    assert.equal(channels.length, 73, '升级后应立即生成 63 个公开台 + 10 个 VIP 台')
+    assert.equal(manager.cache.modules.yangshipin.catalogVersion, getModule('yangshipin').catalogVersion)
+    const onDisk = JSON.parse(readFileSync(manager.cachePath, 'utf8'))
+    assert.equal(onDisk.modules.yangshipin.catalogVersion, getModule('yangshipin').catalogVersion,
+      '成功重建后版本要持久化，避免每次重启重复抓取')
   })
 
   check('向后兼容：老版本写的「全量 key」配置里，空串不该挡住 env 兜底', () => {

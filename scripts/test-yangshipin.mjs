@@ -2,23 +2,68 @@
 import assert from 'node:assert/strict'
 
 import yangshipin from '../extractors/yangshipin/index.js'
-import { CHANNELS, CHANNEL_BY_REF, buildChannels } from '../extractors/yangshipin/channels.js'
+import {
+  AUTH_CHANNELS,
+  AUTH_CHANNEL_BY_REF,
+  CHANNELS,
+  CHANNEL_BY_REF,
+  buildChannels,
+} from '../extractors/yangshipin/channels.js'
 import { createCKey } from '../extractors/yangshipin/ckey.js'
 import { isOfficialMediaUrl, requestPlayUrls, selectWorkingManifest } from '../extractors/yangshipin/api.js'
 import { CACHE_MS, createResolver } from '../extractors/yangshipin/resolver.js'
-import { getModule } from '../extractors/registry.js'
+import {
+  browserLoginAvailability,
+  YspBrowserLogin,
+  YspBrowserSession,
+} from '../extractors/yangshipin/browser-auth.js'
+import { handleLocalRequest, runtime } from '../extractors/yangshipin/runtime.js'
+import {
+  createTrackState,
+  inspectInitSegment,
+  inspectMediaFragment,
+  VipMseBridge,
+} from '../extractors/yangshipin/vip-bridge.js'
+import { getModule, localRequestHandlerFor } from '../extractors/registry.js'
 
 let passed = 0
 const check = (name, fn) => { fn(); passed++; console.log(`  ✅ ${name}`) }
 const checkAsync = async (name, fn) => { await fn(); passed++; console.log(`  ✅ ${name}`) }
 
+function fakeInit(timescale = 90_000) {
+  const body = Buffer.alloc(32)
+  body.write('mdhd', 4)
+  body.writeUInt8(0, 8)
+  body.writeUInt32BE(timescale, 20)
+  body.write('ftyp', 24)
+  return body
+}
+
+function fakeMedia(sequence, { durationUnits = 90_000, bytes = 48 } = {}) {
+  const body = Buffer.alloc(Math.max(48, bytes))
+  body.write('mfhd', 4)
+  body.writeUInt32BE(sequence, 12)
+  body.write('trun', 20)
+  body.writeUIntBE(0x100, 25, 3)
+  body.writeUInt32BE(1, 28)
+  body.writeUInt32BE(durationUnits, 32)
+  body.write('moof', 40)
+  return body
+}
+
+const mseChunk = (mime, body) => ({ mime, base64: body.toString('base64') })
+
 console.log('央视频模块测试')
 
-check('固定输出 63 个公开频道并统一进入央视频分组', () => {
+check('固定输出 63 个公开频道 + 10 个会员频道并统一进入央视频分组', () => {
   assert.equal(CHANNELS.length, 63)
+  assert.equal(AUTH_CHANNELS.length, 10)
   assert.equal(new Set(CHANNELS.map(channel => channel.id)).size, 63)
-  assert.equal(buildChannels().length, 63)
+  assert.equal(new Set(AUTH_CHANNELS.map(channel => channel.id)).size, 10)
+  assert.equal(buildChannels().length, 73)
   assert.equal(yangshipin.name, '央视频')
+  assert.equal(yangshipin.category, 'account')
+  assert.equal(yangshipin.helper, 'yangshipin-login')
   assert.equal(yangshipin.outputGroupName, '央视频')
   // 分片一旦改回经本机转发，平台会对本机去拉分片回 403（实测 relay/302 可播、proxy 不可播）
   assert.equal(yangshipin.channelHlsMode, 'relay')
@@ -28,8 +73,193 @@ check('固定输出 63 个公开频道并统一进入央视频分组', () => {
 check('引用严格受频道白名单约束', () => {
   assert.equal(yangshipin.claimsRef('ysp-cctv1'), true)
   assert.equal(yangshipin.claimsRef('ysp-cctv18'), false)
-  assert.equal(yangshipin.claimsRef('ysp-cctvfyzq'), false, '拿不到匿名地址的付费频道不能手写引用绕过过滤')
+  assert.equal(yangshipin.claimsRef('ysp-cctvfyzq'), false, '会员频道不能伪装成匿名引用')
+  assert.equal(yangshipin.claimsRef('ysp-vip-cctvfyzq'), true)
   assert.equal(CHANNEL_BY_REF.get('ysp-cctv1').channelId, '2024078201')
+  assert.equal(AUTH_CHANNEL_BY_REF.get('ysp-vip-cctvfyzq').livePid, '600099636')
+})
+
+check('会员频道本地媒体路由由模块认领，普通路径不误认', () => {
+  assert.equal(yangshipin.claimsLocalPath('/ysp-vip-cctvfyzq'), true)
+  assert.equal(yangshipin.claimsLocalPath('/ysp-vip/cctvfyzq/video.m3u8'), true)
+  assert.equal(yangshipin.claimsLocalPath('/not-ysp-vip/cctvfyzq/video.m3u8'), false)
+  assert.equal(typeof yangshipin.handleLocalRequest, 'function')
+  assert.equal(typeof yangshipin.browserLoginFlow.start, 'function')
+  assert.equal(localRequestHandlerFor('/ysp-vip/cctvfyzq/video.m3u8'), yangshipin)
+})
+
+check('自动登录能力会识别无桌面 Linux，macOS 桌面可用', () => {
+  assert.equal(browserLoginAvailability({ platform: 'linux', env: {} }).available, false)
+  assert.equal(browserLoginAvailability({ platform: 'linux', env: { DISPLAY: ':0' } }).available, true)
+  assert.equal(browserLoginAvailability({ platform: 'darwin', env: {} }).available, true)
+})
+
+await checkAsync('官网 SDK 校验异常会清掉内存中的旧账号，不继续误报 VIP 有效', async () => {
+  const session = new YspBrowserSession({ profileDir: '/tmp/ysp-test-unused' })
+  session.browser = { connected: true }
+  session.page = {
+    isClosed: () => false,
+    cookies: async () => { throw new Error('SDK unavailable') },
+  }
+  session.account = { nickname: '旧状态', vip: true }
+  const status = await session.readAccount()
+  assert.equal(status.authenticated, false)
+  assert.equal(session.account, null)
+})
+
+check('官网桥接 fMP4 能解析时标、序号和精确时长', () => {
+  const init = fakeInit()
+  assert.deepEqual(inspectInitSegment(init), { timescale: 90_000 })
+
+  const media = fakeMedia(17, { durationUnits: 450_000 })
+  assert.deepEqual(inspectMediaFragment(media, 90_000), { sequence: 17, duration: 5 })
+})
+
+await checkAsync('官网续票重发 init / 序号归零会切换 epoch，不混用旧片段', async () => {
+  const channel = AUTH_CHANNELS[0]
+  const page = { isClosed: () => false, evaluate: async () => [], close: async () => {} }
+  const bridge = new VipMseBridge({}, { maxSegmentBytes: 1024, maxTrackBytes: 4096 })
+  const state = {
+    channel, page, streamId: 7, touched: Date.now(), draining: null, ready: null,
+    audio: createTrackState(), video: createTrackState(),
+  }
+  bridge.streams.set(channel.id, state)
+  try {
+    bridge.ingestChunks(state, [
+      mseChunk('video/mp4', fakeInit()),
+      mseChunk('video/mp4', fakeMedia(100)),
+      mseChunk('video/mp4', fakeMedia(101)),
+    ])
+    assert.deepEqual([...state.video.segments.keys()], [100, 101])
+
+    bridge.ingestChunks(state, [
+      mseChunk('video/mp4', fakeInit()),
+      mseChunk('video/mp4', fakeMedia(1)),
+    ])
+    assert.equal(state.video.epoch, 1)
+    assert.deepEqual([...state.video.segments.keys()], [102], '对外序号须单调递增，不能跟官网一起归零')
+    assert.equal(state.video.segments.get(102).sourceSequence, 1)
+    const playlist = await bridge.playlist(channel, 'video', '/pass')
+    assert.match(playlist, /#EXT-X-DISCONTINUITY/)
+    assert.match(playlist, /init\.mp4\?v=7-1/)
+    assert.match(playlist, /102\.m4s\?v=7-1/)
+    assert.doesNotMatch(playlist, /100\.m4s/)
+  } finally {
+    await bridge.close()
+  }
+})
+
+await checkAsync('会员桥限制异常单片与每轨总字节，避免高码率页面耗尽内存', async () => {
+  const channel = AUTH_CHANNELS[1]
+  const bridge = new VipMseBridge({}, { maxSegmentBytes: 100, maxTrackBytes: 160 })
+  const state = {
+    channel, streamId: 8, audio: createTrackState(), video: createTrackState(),
+  }
+  try {
+    bridge.ingestChunks(state, [mseChunk('video/mp4', fakeInit())])
+    for (const sequence of [1, 2, 3]) {
+      bridge.ingestChunks(state, [mseChunk('video/mp4', fakeMedia(sequence, { bytes: 80 }))])
+    }
+    assert.deepEqual([...state.video.segments.keys()], [2, 3])
+    assert.equal(state.video.segmentBytes, 160)
+    bridge.ingestChunks(state, [mseChunk('video/mp4', fakeMedia(4, { bytes: 120 }))])
+    assert.deepEqual([...state.video.segments.keys()], [2, 3], '超出单片上限的块必须丢弃')
+  } finally {
+    await bridge.close()
+  }
+})
+
+await checkAsync('登录切换会先等待在飞桥接任务收口，再关闭页面', async () => {
+  let finishTask
+  let closed = false
+  const pending = new Promise(resolve => { finishTask = resolve })
+  const page = { close: async () => { closed = true } }
+  const bridge = new VipMseBridge({}, { quiesceTimeoutMs: 500 })
+  bridge.pages.add(page)
+  bridge.trackTask(pending)
+  const suspending = bridge.suspend()
+  await Promise.resolve()
+  assert.equal(closed, false)
+  finishTask()
+  await suspending
+  assert.equal(closed, true)
+  await bridge.close()
+})
+
+await checkAsync('会员 master 保留用户鉴权前缀，HEAD 不启动浏览器且不虚报过期片段', async () => {
+  const master = await handleLocalRequest({
+    path: '/ysp-vip-cctvsjdl', method: 'GET', accessPrefix: '/u/test_token_123',
+  })
+  assert.equal(master.status, 200)
+  assert.match(master.body, /\/u\/test_token_123\/ysp-vip\/cctvsjdl\/audio\.m3u8/)
+  assert.match(master.body, /CODECS="avc1\.640029,mp4a\.40\.2"/)
+  const head = await handleLocalRequest({ path: '/ysp-vip/cctvsjdl/video/7.m4s', method: 'HEAD' })
+  assert.equal(head.status, 404)
+  assert.equal(runtime.browserSession.running, false)
+})
+
+await checkAsync('会员 fMP4 片段支持 Range，过期片段明确 404', async () => {
+  const channel = AUTH_CHANNELS[0]
+  const body = Buffer.from('0123456789')
+  runtime.vipBridge.streams.set(channel.id, {
+    channel,
+    page: { isClosed: () => false, close: async () => {} },
+    touched: Date.now(),
+    audio: { init: body, timescale: 1, segments: new Map(), lastChunkAt: Date.now() },
+    video: { init: body, timescale: 1, segments: new Map([[7, { sequence: 7, duration: 1, body }]]), lastChunkAt: Date.now() },
+  })
+  try {
+    const ranged = await handleLocalRequest({
+      path: `/ysp-vip/${channel.id}/video/7.m4s`, method: 'GET', headers: { range: 'bytes=2-5' },
+    })
+    assert.equal(ranged.status, 206)
+    assert.equal(ranged.body.toString(), '2345')
+    assert.equal(ranged.headers['Content-Range'], 'bytes 2-5/10')
+    const head = await handleLocalRequest({
+      path: `/ysp-vip/${channel.id}/video/7.m4s`, method: 'HEAD', headers: { range: 'bytes=2-5' },
+    })
+    assert.equal(head.status, 206)
+    assert.equal(head.body, '')
+    assert.equal(head.headers['Content-Length'], 4)
+    assert.equal(head.headers['Content-Range'], 'bytes 2-5/10')
+    const missing = await handleLocalRequest({ path: `/ysp-vip/${channel.id}/video/8.m4s`, method: 'GET' })
+    assert.equal(missing.status, 404)
+  } finally {
+    runtime.vipBridge.streams.delete(channel.id)
+  }
+})
+
+await checkAsync('自动登录状态机只启动一轮并在识别后恢复后台会话', async () => {
+  const calls = []
+  const account = { nickname: '测试账号', vip: true }
+  let reads = 0
+  const browserSession = {
+    visible: false,
+    async readAccount() {
+      reads++
+      return reads === 1
+        ? { running: true, visible: false, authenticated: false, account: null }
+        : { running: true, visible: reads === 2, authenticated: true, account }
+    },
+    async openLogin() { this.visible = true; calls.push('open'); return { authenticated: false, account: null } },
+    async close() { this.visible = false; calls.push('close') },
+  }
+  const login = new YspBrowserLogin(browserSession, {
+    beforeOpen: async () => calls.push('suspend'),
+    restore: async () => calls.push('restore'),
+    pollMs: 0,
+    timeoutMs: 100,
+    sleepImpl: async () => {},
+  })
+  const first = login.start()
+  const duplicate = login.start()
+  assert.equal(first.status, 'opening')
+  assert.equal(duplicate.status, 'opening')
+  await login.task
+  assert.deepEqual(calls, ['suspend', 'open', 'close', 'restore'])
+  assert.equal(login.status().status, 'success')
+  assert.equal(login.status().account.nickname, '测试账号')
+  assert.ok(Number.isFinite(login.status().lastVerifiedAt))
 })
 
 check('清晰度档逐频道固定，默认 fhd，剧场频道只认 shd', () => {

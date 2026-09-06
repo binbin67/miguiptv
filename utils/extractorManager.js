@@ -336,7 +336,7 @@ class ExtractorManager {
     if (!isPlainObject(this.cache.modules)) this.cache.modules = {}
     // 磁盘上的配置可能整份换过（备份导入走 reload→load）：把所有模块的配置代数
     // +1，作废还在飞的抓取轮——它们跑的是换盘前的配置（见 #runOne）。
-    let cachePruned = false
+    let cacheChanged = false
     for (const module of listModules()) {
       this.configGen.set(module.id, (this.configGen.get(module.id) || 0) + 1)
       const cacheEntry = this.#cacheEntry(module.id)
@@ -345,12 +345,24 @@ class ExtractorManager {
         cacheEntry.groups = pruned.groups
         cacheEntry.health.channelCount = pruned.groups.reduce(
           (sum, group) => sum + group.dataList.length, 0)
-        cachePruned = true
+        cacheChanged = true
         printYellow(`抓取模块 ${module.name} 已清理 ${pruned.removed} 个新版不再认领的缓存频道`)
+      }
+      // 代码内置频道表升级时，旧磁盘缓存即使未到刷新周期也要立刻重建。
+      // 旧 groups 先保留作失败兜底；ensureWarm 会按版本不匹配主动抓取，只有
+      // 成功后 #recordSuccess 才盖上新版本。
+      if (module.catalogVersion != null
+        && cacheEntry.groups.length > 0
+        && cacheEntry.catalogVersion !== module.catalogVersion) {
+        cacheEntry.health.lastSuccessAt = null
+        cacheEntry.health.nextRetryAt = null
+        cacheEntry.health.consecutiveFailures = 0
+        cacheChanged = true
+        printYellow(`抓取模块 ${module.name} 的频道表已升级，启动时重新生成`)
       }
     }
     this.loaded = true
-    if (cachePruned) this.#saveCache()
+    if (cacheChanged) this.#saveCache()
     // 放在 load() 而不是启动流程里：配置导入会调 reload()，用户导入一份「搬家之前
     // 导出的备份」时，包里 extractors.json 没有这些字段、system-config.json 有，
     // 那时也必须搬一次，否则导入完就是当场降档。
@@ -499,7 +511,12 @@ class ExtractorManager {
       const module = getModule(id)
       const memoryOnly = module?.capabilities?.cache === 'memory'
       persisted.modules[id] = memoryOnly
-        ? { groups: [], health: entry.health, memoryOnly: true }
+        ? {
+            groups: [],
+            health: entry.health,
+            memoryOnly: true,
+            ...(entry.catalogVersion != null ? { catalogVersion: entry.catalogVersion } : {}),
+          }
         : entry
     }
     writeJsonFileSync(this.cachePath, persisted)
@@ -740,9 +757,12 @@ class ExtractorManager {
    */
   #recordSuccess(id, groups, meta) {
     const entry = this.#cacheEntry(id)
+    const catalogVersion = getModule(id)?.catalogVersion
     const count = groups.reduce((sum, group) => sum + (group.dataList?.length || 0), 0)
     entry.groups = groups
     entry.fetchedAt = Date.now()
+    if (catalogVersion != null) entry.catalogVersion = catalogVersion
+    else delete entry.catalogVersion
     entry.health = {
       ...emptyHealth(),
       status: count > 0 ? 'ok' : 'empty',
@@ -782,14 +802,18 @@ class ExtractorManager {
    */
   async ensureWarm() {
     if (!this.loaded) this.load()
-    const cold = listModules().filter(module =>
-      this.isModuleEnabled(module)
-        && this.#cacheEntry(module.id).groups.length === 0
+    const cold = listModules().filter(module => {
+      const cacheEntry = this.#cacheEntry(module.id)
+      const catalogStale = module.catalogVersion != null
+        && cacheEntry.catalogVersion !== module.catalogVersion
+      return this.isModuleEnabled(module)
+        && (cacheEntry.groups.length === 0 || catalogStale)
         // 本进程没抓过才兜底。抓过之后即便结果是 0 条（比如 B 站房间全没开播），
         // 也不再反复重抓——那是合法的空，不是冷缓存。
-        && !this.attempted.has(module.id))
+        && !this.attempted.has(module.id)
+    })
     if (!cold.length) return { updated: false, results: [] }
-    printYellow(`抓取模块缓存未初始化，现抓一次：${cold.map(m => m.name).join('、')}`)
+    printYellow(`抓取模块缓存待预热，现抓一次：${cold.map(m => m.name).join('、')}`)
     const results = []
     for (const module of cold) results.push(await this.#runOne(module))
     this.#saveCache()

@@ -114,6 +114,7 @@ import fengshows from './fengshows/index.js'
 import gansu from './gansu/index.js'
 import gdtv from './gdtv/index.js'
 import gztv from './gztv/index.js'
+import gzstv from './gzstv/index.js'
 import gxtv from './gxtv/index.js'
 import hebtv from './hebtv/index.js'
 import hbtv from './hbtv/index.js'
@@ -159,6 +160,7 @@ const MODULES = [
   gansu,
   gdtv,
   gztv,
+  gzstv,
   gxtv,
   fjtv,
   jlntv,

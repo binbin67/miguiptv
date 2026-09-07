@@ -228,6 +228,12 @@ const cdn = http.createServer((req, res) => {
     res.end(SEG_BODY)
     return
   }
+  if (path === '/live/html-instead.m3u8') {
+    // 部分 CDN 拒绝时不回 4xx，而是 200 + 一页 HTML（登录页 / 地区提示）
+    res.writeHead(200, { 'Content-Type': 'text/html' })
+    res.end('<html><body>\n  地区限制  </body></html>')
+    return
+  }
   if (path === '/live/index.m3u8') {
     // 咪咕真实形态：master 里一条**相对**子清单
     res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' })
@@ -378,6 +384,30 @@ await checkAsync('平台防盗链请求头同时用于清单和分片回源', as
   const response = await fetch(`${nasBase}/proxy/${segRef}`)
   assert.equal(response.status, 200)
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), SEG_BODY)
+})
+
+await checkAsync('清单取回失败时把上游状态码 / 正文头部写进原因，且不带查询串里的令牌', async () => {
+  // 北京时间电视台实测：取流接口已给出地址、服务端拉清单被 CDN 拒绝，此前日志只剩
+  // 一行「取回失败」，403 还是 HTML 完全看不出。原因必须可见，但不能把 token 一起打进日志。
+  const refused = `http://127.0.0.1:${cdn.address().port}/protected/index.m3u8?token=secret-token`
+  const diag = {}
+  assert.equal(await fetchManifestDirect(refused, {}, diag), null)
+  assert.match(diag.reason, /HTTP 403/)
+  assert.match(diag.reason, /missing anti-hotlink headers/)
+  assert.match(diag.reason, /\/protected\/index\.m3u8/)
+  assert.equal(diag.reason.includes('secret-token'), false)
+
+  const html = `http://127.0.0.1:${cdn.address().port}/live/html-instead.m3u8`
+  const diagHtml = {}
+  assert.equal(await fetchManifestDirect(html, {}, diagHtml), null)
+  assert.match(diagHtml.reason, /不是 HLS 清单/)
+  assert.match(diagHtml.reason, /text\/html/)
+  assert.match(diagHtml.reason, /地区限制/)
+  assert.equal(diagHtml.reason.includes('\n'), false, '正文头部要压成一行')
+
+  const ok = {}
+  assert.match(await fetchManifestDirect(`http://127.0.0.1:${cdn.address().port}/live/index.m3u8?token=abc`, {}, ok), /seg-100\.ts/)
+  assert.equal(ok.reason, undefined, '成功时不留原因')
 })
 
 await checkAsync('按目标地址生成请求头，Cookie 可限定到对应 CDN 路径', async () => {

@@ -58,15 +58,44 @@ function inlineResolvedManifest(result) {
   }
 }
 
-// 取回一份 HLS 清单文本（跟随 302），非 200 或非 HLS 内容返回 null
-async function fetchHls(url, signal, upstreamHeaders = {}) {
+// 日志里只留主机 + 路径：query 里通常是签名/令牌，落日志等于泄露可播地址
+function urlForLog(url) {
+  try {
+    const u = new URL(url)
+    return `${u.host}${u.pathname}`
+  } catch {
+    return String(url).split('?')[0]
+  }
+}
+
+// 上游拒绝时把正文头部带进日志：403 的正文往往直接写着 CDN 的拒绝理由（防盗链 / 令牌过期 / 地区限制）
+function bodySnippet(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    // 个别 CDN 的错误页会把请求地址连同令牌一起回显，落日志前抹掉
+    .replace(/\b(token|sign|auth|key)=[^&\s"'<]+/gi, '$1=<已隐藏>')
+    .trim()
+    .slice(0, 120)
+}
+
+// 取回一份 HLS 清单文本（跟随 302），非 200 或非 HLS 内容返回 null。
+// 失败时把原因写进 diag.reason：此前这里静默返回 null，用户日志只剩一行「取回失败」，
+// CDN 到底回了 403 还是回了一页 HTML，排查者对着日志猜不出来（北京时间电视台就卡在这一步）。
+async function fetchHls(url, signal, upstreamHeaders = {}, diag = {}) {
   const resp = await fetchUpstreamResponse(url, {
     signal,
     upstreamHeaders,
   })
-  if (!resp.ok) return null
+  const type = resp.headers.get('content-type') || '未知类型'
   const text = await resp.text()
-  if (!text.trimStart().startsWith('#EXTM3U')) return null
+  if (!resp.ok) {
+    diag.reason = `上游 ${urlForLog(resp.url || url)} 回 HTTP ${resp.status}（${type}）${text.trim() ? ` 正文: ${bodySnippet(text)}` : ''}`
+    return null
+  }
+  if (!text.trimStart().startsWith('#EXTM3U')) {
+    diag.reason = `上游 ${urlForLog(resp.url || url)} 回 HTTP ${resp.status} 但不是 HLS 清单（${type}）${text.trim() ? ` 正文: ${bodySnippet(text)}` : ' 正文为空'}`
+    return null
+  }
   return { text, finalUrl: resp.url || url }
 }
 
@@ -97,12 +126,13 @@ function firstVariantUrl(text, base) {
 //
 // 注意：清单由服务端取回，节点由服务端网络选择，与「客户端就近取流」语义互斥——
 // 兼容模式面向 NAS 与播放设备同一网络的家庭场景，正好不需要就近取流。
-// 返回 null 表示取清单失败或内容不是 HLS，调用方应回退 302。
-async function fetchManifestDirect(playURL, upstreamHeaders = {}) {
+// 返回 null 表示取清单失败或内容不是 HLS，调用方应回退 302；失败原因写进 diag.reason，
+// 由调用方拼进它自己那行限流过的「取回失败」日志，不在这里另起一行。
+async function fetchManifestDirect(playURL, upstreamHeaders = {}, diag = {}) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 10000)   // 覆盖两跳
   try {
-    const master = await fetchHls(playURL, ctrl.signal, upstreamHeaders)
+    const master = await fetchHls(playURL, ctrl.signal, upstreamHeaders, diag)
     if (!master) return null
 
     const variantUrl = firstVariantUrl(master.text, master.finalUrl)
@@ -114,7 +144,9 @@ async function fetchManifestDirect(playURL, upstreamHeaders = {}) {
     }
     return rewriteManifest(master.text, master.finalUrl)
   } catch (error) {
-    printDebug(`清单直出取回失败，回退 302: ${error.message}`)
+    diag.reason = error?.name === 'AbortError'
+      ? `上游 ${urlForLog(playURL)} 10 秒内没有回清单（超时）`
+      : `上游 ${urlForLog(playURL)} 请求出错: ${error?.message || error}`
     return null
   } finally {
     clearTimeout(timer)

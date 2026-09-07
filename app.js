@@ -1299,11 +1299,13 @@ async function handleRequest(req, res) {
     // 服务端取回清单、相对路径改写为绝对地址后直出，播放器无需跟随任何跳转
     const failKey = proxyMode ? proxyPid : routeUrl.split('?')[0]
     let manifest = null
+    const manifestDiag = {}
     if (manifestCooling(failKey)) {
       // 熔断窗口内：直接走下方 302 回退，不再替播放器把重试打到上游
+      manifestDiag.reason = '熔断窗口内未打上游'
     } else {
       manifest = inlineResolvedManifest(result)
-      if (manifest == null) manifest = await fetchManifestDirect(result.playURL, result.upstreamHeaders)
+      if (manifest == null) manifest = await fetchManifestDirect(result.playURL, result.upstreamHeaders, manifestDiag)
       markManifestResult(failKey, manifest != null)
     }
     // 全代理：再把清单里的绝对地址换成本机同源相对地址，分片改由 /proxy/s<key>.ts 转发
@@ -1334,7 +1336,8 @@ async function handleRequest(req, res) {
     // 打一行日志：不跟随跳转的播放器此时会播不了，用户排查时能从日志看出走了回退。
     // 同频道每 5 秒一行——播放器失败后是 100ms 级别的连环重试，逐次打印只会淹没日志。
     if (logOncePer(`manifestfail|${failKey}`, 5 * 1000)) {
-      printYellow(`清单直出取回失败，回退 302（不跟随跳转的播放器将无法播放）: ${routeUrl.split('?')[0]}`)
+      const reason = manifestDiag.reason ? `｜${manifestDiag.reason}` : ''
+      printYellow(`清单直出取回失败，回退 302（不跟随跳转的播放器将无法播放）: ${routeUrl.split('?')[0]}${reason}`)
     }
   }
 

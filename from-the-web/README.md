@@ -22,7 +22,7 @@
 
 ## 怎么添加
 
-后台「🌐 源管理 → 添加订阅源」，来源选「🌐 在线 URL」，粘贴下面这条直链后保存：
+后台「🌐 源管理」，点「＋ 添加自定义源」，切到「订阅模式」，来源选「🌐 在线 URL」，粘贴下面这条直链后「📥 导入并保存」：
 
 ```
 https://raw.githubusercontent.com/akiralereal/iptv/main/from-the-web/from-the-web.m3u

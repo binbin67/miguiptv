@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>iPTV 来源于网络频道添加教程视频源</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6fb;
+            --surface: #ffffff;
+            --surface-soft: #f8fafd;
+            --surface-strong: #eef2f8;
+            --line: #e2e8f0;
+            --text: #172033;
+            --text-secondary: #5f6b7c;
+            --muted: #8792a4;
+            --indigo: #4f63e9;
+            --indigo-soft: #eef1ff;
+            --cyan: #087e86;
+            --cyan-soft: #ecf9fa;
+            --violet: #6d47c7;
+            --violet-soft: #f4f0ff;
+            --pink: #c43d70;
+            --pink-soft: #fff0f6;
+            --green: #1f8a4c;
+            --green-soft: #eaf8ef;
+            --amber: #b86e00;
+            --amber-soft: #fff6e5;
+            --danger: #bc3443;
+            --danger-soft: #fff0f1;
+            --display-size: 66px;
+            --heading-size: 54px;
+            --body-size: 27px;
+            --detail-size: 22px;
+            --meta-size: 19px;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+            font-synthesis: none;
+            text-rendering: geometricPrecision;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .stage {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 12% 4%, rgba(79, 99, 233, .12), transparent 27%),
+                radial-gradient(circle at 91% 15%, rgba(8, 126, 134, .12), transparent 28%),
+                var(--bg);
+        }
+        .stage::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: .34;
+            background-image:
+                linear-gradient(rgba(203, 213, 225, .34) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(203, 213, 225, .34) 1px, transparent 1px);
+            background-size: 68px 68px;
+            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .58), transparent 72%);
+        }
+        .orb { position: absolute; border-radius: 999px; filter: blur(2px); }
+        .orb-a { width: 260px; height: 260px; right: 36px; top: 76px; background: rgba(109, 71, 199, .08); }
+        .orb-b { width: 190px; height: 190px; left: 18px; bottom: 30px; background: rgba(196, 61, 112, .07); }
+
+        .shell {
+            position: absolute;
+            inset: 66px 82px;
+            display: flex;
+            flex-direction: column;
+            padding: 48px 62px 40px;
+            overflow: hidden;
+            border: 1px solid rgba(203, 213, 225, .92);
+            border-radius: 44px;
+            background: rgba(255, 255, 255, .96);
+            box-shadow: 0 28px 78px rgba(31, 45, 78, .12);
+        }
+        .shell::after {
+            content: "";
+            position: absolute;
+            width: 440px;
+            height: 440px;
+            right: -180px;
+            bottom: -225px;
+            border-radius: 50%;
+            border: 78px solid var(--indigo-soft);
+            opacity: .72;
+        }
+
+        .topbar, .footer, .slide { position: relative; z-index: 1; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 72px; }
+        .brand { display: flex; align-items: center; gap: 18px; }
+        .brand-mark {
+            display: grid;
+            place-items: center;
+            width: 68px;
+            height: 68px;
+            border-radius: 19px;
+            background: var(--indigo);
+            color: white;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: .06em;
+            box-shadow: 0 12px 26px rgba(79, 99, 233, .2);
+        }
+        .brand-copy { display: flex; flex-direction: column; line-height: 1.15; }
+        .brand-copy strong { font-size: 26px; font-weight: 720; letter-spacing: .01em; }
+        .brand-copy span { margin-top: 8px; color: var(--muted); font-size: var(--meta-size); }
+        .notice-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 50px;
+            padding: 0 22px;
+            border: 1px solid #d8cbff;
+            border-radius: 999px;
+            background: var(--violet-soft);
+            color: var(--violet);
+            font-size: 21px;
+            font-weight: 650;
+            letter-spacing: .02em;
+        }
+        .notice-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--violet); }
+
+        .slide { display: none; flex: 1; min-height: 0; padding-top: 46px; }
+        body[data-slide="0"] .slide-0, body[data-slide="1"] .slide-1, body[data-slide="2"] .slide-2,
+        body[data-slide="3"] .slide-3, body[data-slide="4"] .slide-4, body[data-slide="5"] .slide-5 { display: flex; }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 11px;
+            color: var(--indigo);
+            font-size: var(--meta-size);
+            font-weight: 760;
+            letter-spacing: .13em;
+            text-transform: uppercase;
+        }
+        .eyebrow::before { content: ""; width: 34px; height: 4px; border-radius: 99px; background: currentColor; }
+        h1, h2, h3, p { margin: 0; }
+        h1 { margin-top: 22px; max-width: 1120px; font-size: var(--display-size); line-height: 1.16; font-weight: 760; letter-spacing: -.035em; }
+        h2 { margin-top: 20px; font-size: var(--heading-size); line-height: 1.2; font-weight: 750; letter-spacing: -.028em; }
+        .lead { margin-top: 22px; color: var(--text-secondary); font-size: var(--body-size); line-height: 1.55; font-weight: 450; }
+        .lead strong { color: var(--text); font-weight: 680; }
+
+        /* 两栏步骤版式：左文案、右示意 */
+        .step-layout {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 640px minmax(0, 1fr);
+            align-items: center;
+            gap: 72px;
+            padding: 0 22px 20px;
+        }
+        .step-copy .lead { max-width: 620px; }
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 6px;
+            color: var(--indigo);
+            font-size: 22px;
+            font-weight: 760;
+            letter-spacing: .04em;
+        }
+        .step-badge .num {
+            display: grid;
+            place-items: center;
+            width: 54px;
+            height: 54px;
+            border-radius: 16px;
+            background: var(--indigo);
+            color: white;
+            font-size: 26px;
+            font-weight: 800;
+        }
+        .tip {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            margin-top: 30px;
+            padding: 18px 22px;
+            border: 1px solid #f2dcb0;
+            border-radius: 18px;
+            background: var(--amber-soft);
+            color: var(--amber);
+            font-size: 21px;
+            line-height: 1.5;
+            font-weight: 560;
+        }
+        .tip .symbol { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--amber); color: white; font-size: 20px; font-weight: 800; }
+
+        /* 示意元素 */
+        .mock-stack { position: relative; display: flex; flex-direction: column; gap: 26px; }
+        .browser {
+            border: 1px solid var(--line);
+            border-radius: 26px;
+            background: var(--surface-soft);
+            overflow: hidden;
+            box-shadow: 0 18px 44px rgba(31, 45, 78, .08);
+        }
+        .browser-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            height: 66px;
+            padding: 0 22px;
+            background: var(--surface-strong);
+            border-bottom: 1px solid var(--line);
+        }
+        .browser-dots { display: flex; gap: 8px; }
+        .browser-dots span { width: 13px; height: 13px; border-radius: 50%; background: #d3d9e3; }
+        .browser-dots span:nth-child(1) { background: #f27d73; }
+        .browser-dots span:nth-child(2) { background: #f5c04c; }
+        .browser-dots span:nth-child(3) { background: #5ec26a; }
+        .address {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            height: 40px;
+            padding: 0 18px;
+            border-radius: 12px;
+            background: white;
+            color: var(--text-secondary);
+            font-size: 20px;
+            font-family: "SF Mono", Menlo, monospace;
+        }
+        .bookmark-bar {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            height: 58px;
+            padding: 0 22px;
+            background: white;
+            border-bottom: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 19px;
+        }
+        .bookmark-bar .bm { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 9px; }
+        .bookmark-bar .bm i { width: 16px; height: 16px; border-radius: 4px; background: #d3d9e3; }
+        .bookmark-bar .bm.hot { color: var(--indigo); background: var(--indigo-soft); border: 1px solid #cdd5ff; font-weight: 700; }
+        .bookmark-bar .bm.hot i { background: var(--indigo); }
+        .bookmark-bar .drop {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 14px;
+            border: 2px dashed #cdd5ff;
+            border-radius: 9px;
+            color: var(--indigo);
+            font-weight: 650;
+        }
+        .browser-body { padding: 26px 28px 30px; }
+
+        .card-mock {
+            padding: 24px 26px;
+            border: 1px solid #bce7e9;
+            border-radius: 22px;
+            background: var(--cyan-soft);
+        }
+        .card-mock .card-title { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 740; }
+        .card-mock .card-title .badge { margin-left: 8px; padding: 5px 12px; border-radius: 999px; background: var(--surface-strong); color: var(--muted); font-size: 16px; font-weight: 650; }
+        .card-mock .card-title .badge.on { background: var(--green-soft); color: var(--green); border: 1px solid #bfe6cd; }
+        .card-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+        .btn-mock { display: inline-flex; align-items: center; height: 44px; padding: 0 18px; border-radius: 11px; border: 1px solid var(--line); background: white; color: var(--text); font-size: 19px; font-weight: 640; }
+        .btn-mock.primary { background: var(--indigo); border-color: var(--indigo); color: white; }
+        .btn-mock.bookmarklet { background: var(--cyan); border-color: var(--cyan); color: white; box-shadow: 0 10px 22px rgba(8, 126, 134, .22); }
+        .btn-mock.link { border: none; background: none; color: var(--indigo); text-decoration: underline; padding: 0 6px; }
+        .textarea-mock {
+            margin-top: 16px;
+            padding: 14px 16px;
+            min-height: 78px;
+            border: 1px solid #ddd;
+            border-radius: 11px;
+            background: white;
+            color: var(--muted);
+            font-size: 18px;
+            font-family: "SF Mono", Menlo, monospace;
+            line-height: 1.45;
+            word-break: break-all;
+        }
+        .textarea-mock.filled { color: var(--text); border-color: var(--indigo); }
+        .textarea-mock.filled b { color: var(--indigo); font-weight: 760; }
+        .card-hint { margin-top: 12px; color: var(--muted); font-size: 17px; line-height: 1.5; }
+
+        .site-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 82px;
+            padding: 0 30px;
+            border-radius: 22px;
+            border: 1px solid var(--line);
+            background: white;
+        }
+        .site-logo { display: flex; align-items: center; gap: 12px; color: #d0342c; font-size: 28px; font-weight: 800; letter-spacing: .02em; }
+        .site-logo i { width: 38px; height: 38px; border-radius: 10px; background: #d0342c; }
+        .site-nav { display: flex; gap: 26px; color: var(--text-secondary); font-size: 20px; }
+        .site-user { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 650; }
+        .site-user .avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--violet), var(--pink)); }
+        .site-user .login-btn { padding: 8px 18px; border-radius: 999px; background: #d0342c; color: white; }
+        .dialog-mock {
+            width: 560px;
+            margin: 26px auto 0;
+            padding: 26px 30px 30px;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: white;
+            box-shadow: 0 18px 44px rgba(31, 45, 78, .1);
+        }
+        .dialog-tabs { display: flex; gap: 26px; font-size: 21px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+        .dialog-tabs .on { color: var(--text); font-weight: 720; border-bottom: 3px solid #d0342c; margin-bottom: -13px; padding-bottom: 12px; }
+        .field { display: flex; align-items: center; height: 50px; margin-top: 16px; padding: 0 16px; border: 1px solid var(--line); border-radius: 11px; color: var(--muted); font-size: 19px; }
+        .field.code { justify-content: space-between; }
+        .field .get-code { color: #d0342c; font-weight: 650; }
+        .dialog-submit { margin-top: 18px; height: 50px; border-radius: 11px; background: #d0342c; color: white; display: grid; place-items: center; font-size: 20px; font-weight: 700; }
+        .wechat-hint { margin-top: 14px; text-align: center; color: var(--muted); font-size: 18px; }
+
+        /* 开发者工具示意 */
+        .devtools { background: #fbfcfe; }
+        .devtools-tabs { display: flex; gap: 26px; height: 52px; padding: 0 22px; align-items: center; border-bottom: 1px solid var(--line); background: var(--surface-strong); color: var(--text-secondary); font-size: 19px; }
+        .devtools-tabs .on { color: var(--indigo); font-weight: 720; border-bottom: 3px solid var(--indigo); padding: 14px 0 11px; }
+        .devtools-toolbar { display: flex; gap: 22px; align-items: center; height: 46px; padding: 0 22px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 17px; }
+        .devtools-toolbar .rec { width: 14px; height: 14px; border-radius: 50%; background: #e0443e; }
+        .devtools-toolbar .filter { margin-left: auto; padding: 4px 14px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+        .req-list { padding: 8px 0 14px; }
+        .req-head, .req { display: grid; grid-template-columns: 1fr 90px 110px 90px; gap: 10px; padding: 9px 22px; font-size: 18px; }
+        .req-list.narrow .req-head, .req-list.narrow .req { grid-template-columns: 1fr; }
+        .req-head { color: var(--muted); border-bottom: 1px solid var(--line); font-size: 16px; }
+        .req { color: var(--text-secondary); border-bottom: 1px solid #eef1f6; font-family: "SF Mono", Menlo, monospace; font-size: 17px; }
+        .req.hot { background: var(--indigo-soft); color: var(--indigo); font-weight: 700; }
+        .devtools-split { display: grid; grid-template-columns: 250px 1fr; min-height: 380px; }
+        .devtools-split .req-list { border-right: 1px solid var(--line); }
+        .headers { padding: 0 0 16px; }
+        .headers-tabs { display: flex; gap: 22px; height: 46px; padding: 0 20px; align-items: center; border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 17px; }
+        .headers-tabs .on { color: var(--indigo); font-weight: 720; }
+        .headers-title { padding: 14px 20px 8px; color: var(--text); font-size: 18px; font-weight: 720; }
+        .hdr { display: grid; grid-template-columns: 118px 1fr; gap: 12px; padding: 9px 20px; font-size: 16px; line-height: 1.45; color: var(--text-secondary); font-family: "SF Mono", Menlo, monospace; word-break: break-all; }
+        .hdr span:first-child { color: var(--text); font-weight: 700; }
+        .hdr.hot { background: var(--indigo-soft); color: var(--indigo); border-radius: 10px; margin: 4px 12px; padding: 10px 8px; }
+        .hdr.hot span:first-child { color: var(--indigo); }
+
+        .alert-mock {
+            position: absolute;
+            left: 50%;
+            top: 62%;
+            transform: translate(-50%, -50%);
+            width: 640px;
+            padding: 26px 30px 24px;
+            border-radius: 18px;
+            background: white;
+            border: 1px solid var(--line);
+            box-shadow: 0 24px 60px rgba(31, 45, 78, .22);
+            z-index: 2;
+        }
+        .alert-mock .alert-host { color: var(--muted); font-size: 17px; }
+        .alert-mock .alert-text { margin-top: 10px; font-size: 22px; line-height: 1.5; font-weight: 620; }
+        .alert-mock .alert-ok { margin-top: 18px; margin-left: auto; width: 96px; height: 42px; border-radius: 10px; background: var(--indigo); color: white; display: grid; place-items: center; font-size: 19px; font-weight: 700; }
+        .dim { opacity: .55; }
+
+        .pointer {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: var(--pink);
+            color: white;
+            font-size: 19px;
+            font-weight: 720;
+            box-shadow: 0 12px 26px rgba(196, 61, 112, .3);
+            z-index: 3;
+        }
+        .pointer::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: white; }
+
+        /* 首尾页 */
+        .intro-layout {
+            width: 100%;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 600px;
+            align-items: center;
+            gap: 90px;
+            padding: 0 22px 24px;
+        }
+        .intro-copy .lead { max-width: 900px; }
+        .feature-pills { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+        .feature-pill { display: inline-flex; align-items: center; min-height: 48px; padding: 0 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-soft); color: var(--text-secondary); font-size: 21px; font-weight: 620; }
+        .feature-pill:nth-child(1) { color: var(--indigo); background: var(--indigo-soft); border-color: #cdd5ff; }
+        .feature-pill:nth-child(2) { color: var(--cyan); background: var(--cyan-soft); border-color: #bce7e9; }
+        .feature-pill:nth-child(3) { color: var(--violet); background: var(--violet-soft); border-color: #d8cbff; }
+        .feature-pill:nth-child(4) { color: var(--green); background: var(--green-soft); border-color: #bfe6cd; }
+        .overview { padding: 30px 32px; border: 1px solid var(--line); border-radius: 30px; background: var(--surface-soft); }
+        .overview h3 { font-size: 24px; font-weight: 740; color: var(--text-secondary); letter-spacing: .04em; }
+        .overview ol { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 14px; }
+        .overview li { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 16px; min-height: 84px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 18px; background: white; font-size: 23px; font-weight: 640; line-height: 1.4; }
+        .overview li span { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; background: var(--indigo-soft); color: var(--indigo); font-size: 20px; font-weight: 760; }
+        .overview li small { display: block; margin-top: 4px; color: var(--muted); font-size: 18px; font-weight: 500; }
+
+        .done-layout { width: 100%; display: flex; flex-direction: column; justify-content: center; padding: 0 22px 20px; }
+        .done-layout h2 strong { color: var(--green); font-weight: inherit; }
+        .done-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 34px; }
+        .info-card { min-height: 236px; padding: 28px 30px; border: 1px solid var(--line); border-radius: 24px; background: var(--surface-soft); }
+        .info-card .icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 15px; font-size: 26px; font-weight: 800; color: white; }
+        .info-card:nth-child(1) .icon { background: var(--indigo); }
+        .info-card:nth-child(2) .icon { background: var(--cyan); }
+        .info-card:nth-child(3) .icon { background: var(--pink); }
+        .info-card h3 { margin-top: 18px; font-size: 26px; line-height: 1.25; font-weight: 740; }
+        .info-card p { margin-top: 14px; color: var(--text-secondary); font-size: var(--detail-size); line-height: 1.5; }
+        .scope-note { margin-top: 26px; color: var(--text-secondary); font-size: 21px; line-height: 1.5; }
+        .scope-note strong { color: var(--text); }
+
+        .footer { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding-top: 26px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--meta-size); }
+        .timeline { display: flex; align-items: center; gap: 10px; }
+        .timeline span { width: 34px; height: 5px; border-radius: 99px; background: var(--line); }
+        body[data-slide="0"] .timeline span:nth-child(1), body[data-slide="1"] .timeline span:nth-child(2), body[data-slide="2"] .timeline span:nth-child(3),
+        body[data-slide="3"] .timeline span:nth-child(4), body[data-slide="4"] .timeline span:nth-child(5), body[data-slide="5"] .timeline span:nth-child(6) { width: 64px; background: var(--indigo); }
+
+        .logo-canvas {
+            position: relative;
+            display: none;
+            width: 512px;
+            height: 512px;
+            overflow: hidden;
+            padding: 46px;
+            background:
+                radial-gradient(circle at 88% 8%, rgba(109, 71, 199, .2), transparent 36%),
+                radial-gradient(circle at 6% 92%, rgba(8, 126, 134, .16), transparent 38%),
+                var(--bg);
+        }
+        .logo-card { position: relative; width: 100%; height: 100%; padding: 42px; border: 2px solid var(--line); border-radius: 74px; background: rgba(255, 255, 255, .97); box-shadow: 0 22px 48px rgba(31, 45, 78, .13); }
+        .logo-mark { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 21px; background: var(--indigo); color: white; font-size: 23px; font-weight: 800; letter-spacing: .04em; }
+        .logo-name { margin-top: 62px; color: var(--text); font-size: 94px; line-height: 1; font-weight: 770; letter-spacing: -.06em; }
+        .logo-label { margin-top: 25px; color: var(--violet); font-size: 30px; line-height: 1; font-weight: 700; letter-spacing: .08em; }
+        .logo-accents { position: absolute; right: 41px; bottom: 43px; display: flex; gap: 10px; }
+        .logo-accents span { width: 11px; height: 11px; border-radius: 50%; }
+        .logo-accents span:nth-child(1) { background: var(--indigo); }
+        .logo-accents span:nth-child(2) { background: var(--violet); }
+        .logo-accents span:nth-child(3) { background: var(--pink); }
+
+        body[data-mode="logo"] .stage { display: none; }
+        body[data-mode="logo"] .logo-canvas { display: block; }
+        /* ——— 来源于网络教程专用示意 ——— */
+        .file-card { border: 1px solid var(--line); border-radius: 26px; background: white; overflow: hidden; box-shadow: 0 18px 44px rgba(31, 45, 78, .08); }
+        .file-head { display: flex; align-items: center; gap: 14px; height: 66px; padding: 0 24px; background: var(--surface-strong); border-bottom: 1px solid var(--line); font-family: "SF Mono", Menlo, monospace; font-size: 20px; color: var(--text-secondary); }
+        .file-head .ico { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--indigo); color: white; font-size: 14px; font-weight: 800; }
+        .file-head b { color: var(--text); font-weight: 720; }
+        .file-body { padding: 14px 24px 16px; }
+        .file-row { display: grid; grid-template-columns: 132px 1fr; align-items: center; gap: 18px; padding: 10px 0; border-bottom: 1px solid #eef1f6; }
+        .file-row:last-child { border-bottom: none; }
+        .file-row .tag { display: inline-flex; align-items: center; justify-content: center; height: 40px; border-radius: 10px; background: var(--indigo-soft); color: var(--indigo); font-size: 20px; font-weight: 720; }
+        .file-row .bar { height: 14px; border-radius: 99px; background: linear-gradient(90deg, var(--indigo), var(--violet)); opacity: .5; }
+        .file-foot { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; color: var(--muted); font-size: 18px; border-top: 1px solid var(--line); background: var(--surface-soft); }
+        .file-foot b { color: var(--violet); font-weight: 700; }
+
+        .repo-list { padding: 6px 0 4px; }
+        .repo-row { display: grid; grid-template-columns: 30px 1fr 250px; align-items: center; gap: 14px; padding: 12px 26px; border-bottom: 1px solid #eef1f6; color: var(--text-secondary); font-size: 20px; font-family: "SF Mono", Menlo, monospace; }
+        .repo-row i { width: 22px; height: 22px; border-radius: 5px; background: #d3d9e3; }
+        .repo-row.hot { background: var(--indigo-soft); color: var(--indigo); font-weight: 720; }
+        .repo-row.hot i { background: var(--indigo); }
+        .repo-row span:last-child { color: var(--muted); font-size: 17px; text-align: right; font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif; }
+        .repo-row.hot span:last-child { color: var(--indigo); }
+
+        .link-box { margin: 22px 26px 26px; padding: 20px 24px; border: 2px solid var(--indigo); border-radius: 18px; background: white; color: var(--indigo); font-family: "SF Mono", Menlo, monospace; font-size: 23px; line-height: 1.5; font-weight: 700; word-break: break-all; }
+        .link-box small { display: block; margin-top: 10px; color: var(--text-secondary); font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif; font-size: 18px; font-weight: 500; }
+
+        .mode-mock { display: flex; gap: 10px; margin-top: 10px; }
+        .mode-mock span { display: inline-flex; align-items: center; height: 44px; padding: 0 18px; border-radius: 11px; border: 1px solid var(--line); background: white; color: var(--text-secondary); font-size: 19px; font-weight: 640; }
+        .mode-mock span.on { background: var(--indigo); border-color: var(--indigo); color: white; }
+        .field-label { margin-top: 18px; color: var(--text-secondary); font-size: 18px; font-weight: 650; }
+        .input-mock { display: flex; align-items: center; height: 50px; margin-top: 10px; padding: 0 16px; border: 1px solid var(--line); border-radius: 11px; background: white; color: var(--text); font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .input-mock.url { border-color: var(--indigo); color: var(--indigo); font-family: "SF Mono", Menlo, monospace; font-size: 18px; font-weight: 650; }
+    </style>
+</head>
+<body data-slide="0">
+    <main class="stage">
+        <div class="orb orb-a"></div>
+        <div class="orb orb-b"></div>
+        <section class="shell">
+            <header class="topbar">
+                <div class="brand">
+                    <span class="brand-mark">TV</span>
+                    <span class="brand-copy">
+                        <strong>iPTV 管理台</strong>
+                        <span>频道管理控制台</span>
+                    </span>
+                </div>
+                <span class="notice-pill"><i class="notice-dot"></i>使用教程 · 来源于网络的频道</span>
+            </header>
+
+            <!-- 0 开场 -->
+            <section class="slide slide-0">
+                <div class="intro-layout">
+                    <div class="intro-copy">
+                        <span class="eyebrow">From the web · How to</span>
+                        <h1>「来源于网络」的频道<br>自己一条地址加回来</h1>
+                        <p class="lead">内置精选列表以前收过一些<strong>网络上流传的第三方直播源</strong>，现在它们单独放在仓库的 from-the-web 目录里，不再默认提供。需要的话，往后台粘一条地址就能全部加回来。</p>
+                        <div class="feature-pills">
+                            <span class="feature-pill">只需一条地址</span>
+                            <span class="feature-pill">约一分钟</span>
+                            <span class="feature-pill">不进默认列表</span>
+                            <span class="feature-pill">新收录自动出现</span>
+                        </div>
+                    </div>
+                    <div class="overview" aria-hidden="true">
+                        <h3>三步完成</h3>
+                        <ol>
+                            <li><span>1</span><div>复制列表地址<small>仓库 from-the-web 目录里的 m3u 直链</small></div></li>
+                            <li><span>2</span><div>后台添加订阅<small>源管理 → 添加自定义源 → 订阅模式 → 在线 URL</small></div></li>
+                            <li><span>3</span><div>导入并保存<small>频道按地区分组进入「我的频道」</small></div></li>
+                        </ol>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 1 它是什么 -->
+            <section class="slide slide-1">
+                <div class="step-layout">
+                    <div class="step-copy">
+                        <span class="step-badge"><span class="num">?</span>先说清楚它是什么</span>
+                        <h2>网络上流传的第三方源<br>单独存成一个文件</h2>
+                        <p class="lead">这些地址来自<strong>网友搭的转发站</strong>，不是电视台官方源，本项目不维护、不保证能播。复核后已从内置精选列表移出，统一备份在 <strong>from-the-web.m3u</strong>；以后从网络收集到的其它链接，也会继续备份到这个文件里。</p>
+                        <div class="tip"><span class="symbol">!</span><span>国内直连大多打不开，海外网络或路由器全局代理环境才能播；失效条目不作为 bug 处理。</span></div>
+                    </div>
+                    <div class="mock-stack">
+                        <div class="file-card">
+                            <div class="file-head"><span class="ico">M3U</span><span>from-the-web / <b>from-the-web.m3u</b></span></div>
+                            <div class="file-body">
+                                <div class="file-row"><span class="tag">台湾</span><span class="bar" style="width: 92%;"></span></div>
+                                <div class="file-row"><span class="tag">香港</span><span class="bar" style="width: 58%;"></span></div>
+                                <div class="file-row"><span class="tag">澳门</span><span class="bar" style="width: 26%;"></span></div>
+                                <div class="file-row"><span class="tag">新加坡</span><span class="bar" style="width: 18%;"></span></div>
+                                <div class="file-row"><span class="tag">马来西亚</span><span class="bar" style="width: 14%;"></span></div>
+                                <div class="file-row"><span class="tag">影视</span><span class="bar" style="width: 64%;"></span></div>
+                            </div>
+                            <div class="file-foot"><span>按地区分组 · 一个文件装下全部</span><span><b>持续收录</b> 网络上流传的其它链接</span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2 复制地址 -->
+            <section class="slide slide-2">
+                <div class="step-layout">
+                    <div class="step-copy">
+                        <span class="step-badge"><span class="num">1</span>复制列表地址</span>
+                        <h2>地址固定不变<br>内容跟着仓库更新</h2>
+                        <p class="lead">打开 GitHub 仓库 <strong>akiralereal/iptv</strong> 的 from-the-web 目录，README 里就有这条直链；或者直接照右边这条抄。以后文件里新收录的链接，订阅刷新后会自动出现，<strong>不用再加一次</strong>。</p>
+                        <div class="tip"><span class="symbol">!</span><span>地址在国内拉取时会自动回退 GitHub 镜像，列表本身不用翻墙就能拿到。</span></div>
+                    </div>
+                    <div class="mock-stack">
+                        <div class="browser">
+                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">https://github.com/akiralereal/iptv/tree/main/from-the-web</span></div>
+                            <div class="repo-list">
+                                <div class="repo-row"><i></i><span>..</span><span></span></div>
+                                <div class="repo-row"><i></i><span>README.md</span><span>说明、收录范围与直链</span></div>
+                                <div class="repo-row hot"><i></i><span>from-the-web.m3u</span><span>「来源于网络」列表</span></div>
+                            </div>
+                            <div class="link-box">https://raw.githubusercontent.com/akiralereal/iptv/main/from-the-web/from-the-web.m3u<small>复制整行，下一步粘到后台</small></div>
+                        </div>
+                        <span class="pointer" style="right: 52px; bottom: 40px;">↑ 复制这一整行</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3 后台添加 -->
+            <section class="slide slide-3">
+                <div class="step-layout">
+                    <div class="step-copy">
+                        <span class="step-badge"><span class="num">2</span>后台添加订阅</span>
+                        <h2>源管理 → 添加自定义源<br>选「订阅模式」，粘贴地址</h2>
+                        <p class="lead">打开 iPTV 后台的「<strong>🌐 源管理</strong>」，点「<strong>＋ 添加自定义源</strong>」，切到「<strong>订阅模式</strong>」，来源选「<strong>🌐 在线 URL</strong>」，把地址粘进去，起个名字，点「<strong>📥 导入并保存</strong>」。</p>
+                        <div class="tip"><span class="symbol">!</span><span>能不能播取决于你的网络能否访问海外；列表拿到了但频道打不开，多半是这个原因。</span></div>
+                    </div>
+                    <div class="mock-stack">
+                        <div class="browser">
+                            <div class="browser-bar"><span class="browser-dots"><span></span><span></span><span></span></span><span class="address">http://你的NAS地址:1905/admin</span></div>
+                            <div class="browser-body">
+                                <div class="card-mock">
+                                    <div class="card-title">＋ 添加自定义源 <span class="badge">🌐 源管理</span></div>
+                                    <div class="mode-mock"><span>直连模式</span><span>抓取模式</span><span class="on">订阅模式</span></div>
+                                    <div class="field-label">订阅名称 *</div>
+                                    <div class="input-mock">来源于网络</div>
+                                    <div class="field-label">来源 *</div>
+                                    <div class="mode-mock"><span class="on">🌐 在线 URL</span><span>📁 本地文件 / 粘贴</span></div>
+                                    <div class="input-mock url">https://raw.githubusercontent.com/akiralereal/iptv/main/from-the-web/from-the-web.m3u</div>
+                                    <div class="card-row"><span class="btn-mock primary">📥 导入并保存</span><span class="card-hint" style="margin: 0;">解析入库后，频道进入「我的频道」</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="pointer" style="right: 60px; bottom: 58px;">← 粘贴地址后点这里</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4 完成 -->
+            <section class="slide slide-4">
+                <div class="done-layout">
+                    <span class="eyebrow">All set</span>
+                    <h2><strong>完成</strong>，频道已按地区分组进入播放列表</h2>
+                    <p class="lead">电视端重新加载一次播放列表即可看到；不想要的频道在「我的频道」里隐藏或挪到别的分组。</p>
+                    <div class="done-grid">
+                        <article class="info-card">
+                            <span class="icon">↻</span>
+                            <h3>新收录的链接自动出现</h3>
+                            <p>以后备份进 from-the-web.m3u 的其它网络链接，订阅定时刷新后自动进入列表，不用重新添加。</p>
+                        </article>
+                        <article class="info-card">
+                            <span class="icon">!</span>
+                            <h3>不保证能播</h3>
+                            <p>第三方转发站随时可能失效，国内直连基本播不了；失效条目不作为 bug 处理，删掉这条订阅即可全部移除。</p>
+                        </article>
+                        <article class="info-card">
+                            <span class="icon">≠</span>
+                            <h3>不进默认列表</h3>
+                            <p>内置精选列表只留复核通过的地址；这份清单只给需要的人自己加，其他用户不受影响。</p>
+                        </article>
+                    </div>
+                    <p class="scope-note"><strong>完整说明：</strong>仓库 from-the-web 目录下的 README 写明了收录范围、复核结果和添加步骤。</p>
+                </div>
+            </section>
+
+            <footer class="footer">
+                <span>iFansClub.com · github.com/akiralereal/iptv</span>
+                <span class="timeline"><span></span><span></span><span></span><span></span><span></span></span>
+            </footer>
+        </section>
+    </main>
+
+    <main class="logo-canvas">
+        <section class="logo-card">
+            <span class="logo-mark">TV</span>
+            <div class="logo-name">iPTV</div>
+            <div class="logo-label">来源于网络教程</div>
+            <div class="logo-accents"><span></span><span></span><span></span></div>
+        </section>
+    </main>
+
+    <script>
+        const params = new URLSearchParams(location.search)
+        const mode = params.get('mode') === 'logo' ? 'logo' : 'video'
+        const slide = Math.max(0, Math.min(4, Number.parseInt(params.get('slide') || '0', 10) || 0))
+        document.body.dataset.mode = mode
+        document.body.dataset.slide = String(slide)
+    </script>
+</body>
+</html>

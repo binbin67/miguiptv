@@ -7,6 +7,7 @@
  * 用法：
  *   node scripts/generate-announcement-video.mjs                 # 只生成公告短片（默认）
  *   node scripts/generate-announcement-video.mjs ysp-login-guide # 只生成央视频登录教程
+ *   node scripts/generate-announcement-video.mjs from-the-web-guide # 只生成「来源于网络」添加教程
  *   node scripts/generate-announcement-video.mjs all             # 全部
  *   node scripts/generate-announcement-video.mjs <name> --frames <dir>   # 额外把每页 PNG 留到目录里，方便看版式
  *
@@ -39,6 +40,13 @@ const TARGETS = {
     logo: 'ysp-login-guide-logo.png',
     slides: 6,
     title: '央视频会员频道：把登录态导入 iPTV',
+  },
+  'from-the-web-guide': {
+    source: 'from-the-web-guide-source.html',
+    video: 'from-the-web-guide.mp4',
+    logo: 'from-the-web-guide-logo.png',
+    slides: 5,
+    title: '来源于网络的频道：把 from-the-web.m3u 加进 iPTV',
   },
 }
 

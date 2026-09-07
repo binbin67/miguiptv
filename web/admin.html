@@ -7565,12 +7565,13 @@ if(success){
         let lastEditedChannelId = null; // 最近编辑过的频道ID（重命名/移动后），用于重渲染后临时高亮定位 (issue #50)
         let editHighlightTimer = null;  // 临时高亮自动消退的定时器句柄
         const SYSTEM_ANNOUNCEMENT_ID = 'iptv-announcement';
-        // 系统频道：公告 + 央视频登录教程，都在「公告」分组、可逐条隐藏、不能删/移/改名/改序。
+        // 系统频道：公告 + 央视频登录教程 + 「来源于网络」添加教程，都在「公告」分组、可逐条隐藏、不能删/移/改名/改序。
         // 与服务端 utils/announcement.js 的 SYSTEM_CHANNELS 对应。
-        const SYSTEM_CHANNEL_IDS = new Set([SYSTEM_ANNOUNCEMENT_ID, 'iptv-ysp-login-guide']);
+        const SYSTEM_CHANNEL_IDS = new Set([SYSTEM_ANNOUNCEMENT_ID, 'iptv-ysp-login-guide', 'iptv-from-the-web-guide']);
         const SYSTEM_CHANNEL_NOTES = {
             'iptv-announcement': '项目自带的使用说明与版权提示短片',
             'iptv-ysp-login-guide': '演示如何从浏览器复制 Cookie 把央视频登录态导入 iPTV 的教程短片，给 Docker / NAS 用户看的',
+            'iptv-from-the-web-guide': '演示如何把仓库 from-the-web.m3u 里的网络第三方源作为订阅添加到 iPTV 的教程短片，给想自己加回这些频道的用户看的',
         };
 
         function isSystemAnnouncementChannel(channel) {

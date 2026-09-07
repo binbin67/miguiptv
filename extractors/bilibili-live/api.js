@@ -64,14 +64,15 @@ export class RiskControlError extends Error {
  * 失败返回 undefined 而不抛、还会 printRed 刷屏；而这里需要读 HTTP 状态码、
  * 需要按 code 分辨风控、需要把错误结构化交给 health() 展示。
  */
-async function apiGet(path, params, { cookie, timeoutMs = 10000 } = {}) {
+async function apiGet(path, params, { cookie, timeoutMs = 10000, fetchImpl } = {}) {
   const url = `${API}${path}?${new URLSearchParams(params)}`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   let payload
   try {
-    const response = await fetch(url, {
+    // fetchImpl 只供测试注入：播放时解析的缓存 / 失败记忆逻辑要能离线单测
+    const response = await (fetchImpl || fetch)(url, {
       headers: {
         'User-Agent': UA,
         Referer: REFERER,
@@ -499,20 +500,30 @@ export function selectFromPlayurl(data, { preferHls = true, preferAvc = true } =
 }
 
 /**
- * 解析一间房 → 一个频道对象。
+ * 抓取时把一间房整理成一个频道对象。
  *
  * 返回的对象形状必须与 externalSources/builtInSources 的 getValidChannels()
  * 同构，才能被 channelMerger 原样吞下（见 utils/channelMerger.js 的合并逻辑）。
+ *
+ * 频道**不带播放地址**：B 站的签名地址实测只有 60 分钟有效（不是早先以为的约 2 小时），
+ * 写进播放列表的话，播放器不重拉列表就只能拿到死链——多数电视端播放器几小时甚至
+ * 一天才重拉一次，正在播的流也会在签名到期那一刻被 403 掐断（issue #120）。
+ * 所以这里只落 deferredRef，播放请求到达时再由下面的 resolveRoom 现换地址，并由
+ * 本机中继清单（relayHls），与虎牙 / 斗鱼同款。
+ *
+ * 仍然调一次 getRoomPlayInfo：一是拿实际给到的画质档写进频道名（也是判断
+ * SESSDATA 有没有生效的唯一信号），二是把地区限制等没有可播流的房间在抓取时
+ * 就剔掉，而不是留一条到播放时才失败的频道。请求量与直链时代持平。
  */
-export async function resolveRoom(roomRef, options = {}) {
-  const { cookie, preferHls = true, preferAvc = true, cachingMs = 3000, timeoutMs } = options
-  const netOptions = { cookie, timeoutMs }
+export async function fetchRoom(roomRef, options = {}) {
+  const { cookie, preferAvc = true, timeoutMs, fetchImpl } = options
+  const netOptions = { cookie, timeoutMs, fetchImpl }
 
   const roomId = await normalizeRoom(roomRef, netOptions)
   const info = await roomInfo(roomId, netOptions)
   if (!info.live) throw new RoomOfflineError('未开播')
 
-  const { url, qn } = await pickStream(info.roomId, { preferHls, preferAvc, ...netOptions })
+  const { qn } = await pickStream(info.roomId, { preferHls: true, preferAvc, ...netOptions })
   const anchor = info.uid
     ? await anchorInfo(info.uid, netOptions)
     : { name: '', avatar: '' }
@@ -521,23 +532,15 @@ export async function resolveRoom(roomRef, options = {}) {
   const tier = QN_NAMES[qn] || (qn ? String(qn) : '?')
   const name = `[${tier}] ` + (info.title ? `${displayName} · ${info.title}` : displayName)
 
-  // 请求头交给 utils/channelOpts.js 渲染，这里只产出结构化的 key=value；
-  // 不要自己做 M3U 转义，否则会与生成侧的消毒重复转义。
-  //
-  // 实测卡的是 UA 不是 Referer（裸请求 403 / 只给 Referer 仍 403 / 只给 UA 就 200），
-  // 但两条都发：校验口径 B 站随时可能调，多一个头没有代价。
-  const opts = [
-    `http-referrer=${REFERER}`,
-    `http-user-agent=${UA}`,
-    ...(cachingMs ? [`network-caching=${cachingMs}`] : []),
-  ]
-
   return {
     channel: {
       name: sanitizeText(name),
       logo: anchor.avatar || '',
-      url,
-      opts,
+      deferredRef: refOf(info.roomId),
+      // 防盗链请求头由本机中继清单时发送，不再靠 #EXTVLCOPT 下发给播放器：
+      // 不认 EXTVLCOPT 的播放器（LunaTV 等）也能播，TXT / TVBox 订阅也不再整条跳过。
+      // 实测 HLS 清单与分片本身不校验 UA / Referer，分片由播放器直连 CDN 没有问题。
+      relayHls: true,
       groupTitle: BILIBILI_GROUP,
     },
     group: BILIBILI_GROUP,
@@ -546,6 +549,104 @@ export async function resolveRoom(roomRef, options = {}) {
     // 短链各长各样），同一间房换个写法就绕过去了——外层要按这个再去一次重。
     roomId: String(info.roomId),
   }
+}
+
+// ---- 播放时解析 ----
+
+// deferredRef 形如 bili-<房间号>。必须是单个路径段：写盘落成 ${replace}/relay/<ref>.m3u8，
+// playlistConfig.buildChannelId 取它当频道主键，多段会失配、让「我的频道」配置作废。
+const REF_RE = /^bili-(\d{1,16})$/
+
+function refOf(roomId) {
+  return `bili-${roomId}`
+}
+
+/** 播放请求靠它路由到本模块（见 registry.resolverFor）。 */
+export function claimsRef(ref) {
+  return REF_RE.test(String(ref || ''))
+}
+
+// 签名地址 60 分钟有效，但缓存只留 60 秒：播放器每几秒轮询一次清单，缓存挡住的是
+// 这种密集轮询，而不是为了把一份地址用满一小时——主播重开播 / 切流后旧地址会失效，
+// 缓存越长恢复越慢。与虎牙 / 斗鱼同款取值。
+const RESOLVE_TTL_MS = 60 * 1000
+// 失败也要短暂记住：播放器失败后是 100ms 级别的连环重试，逐次打到 B 站接口等于
+// 主动招风控。风控（-352）本身记久一点，连续撞它只会延长被封的时间。
+const RESOLVE_FAIL_TTL_MS = 15 * 1000
+const RESOLVE_RISK_TTL_MS = 60 * 1000
+
+const resolveCache = new Map()
+const resolvePending = new Map()
+
+async function resolveFresh(roomId, options) {
+  const { url, qn } = await pickStream(roomId, { preferHls: true, ...options })
+  const tier = QN_NAMES[qn] || (qn ? String(qn) : '?')
+  return {
+    url,
+    desc: `B 站直播间 ${roomId}（${tier}）地址获取成功`,
+    relayHls: true,
+    upstreamHeaders: { Referer: REFERER, 'User-Agent': UA },
+  }
+}
+
+/**
+ * 播放时解析：deferredRef → 当前有效的签名地址。
+ *
+ * 模块契约要求**绝不抛异常**（app.js 的请求 handler 没有顶层 try）；失败一律返回
+ * url 为空串 + 给客户端看的 desc。
+ *
+ * @param {string} ref  bili-<房间号>
+ * @param {object} ctx  { config, now?, timeoutMs?, fetchImpl? }  config 是模块生效配置
+ */
+export async function resolveRoom(ref, ctx = {}) {
+  try {
+    const match = REF_RE.exec(String(ref || ''))
+    if (!match) return { url: '', desc: 'B 站直播间引用格式错误' }
+    const roomId = match[1]
+    const config = ctx.config || {}
+    const cookie = config.sessdata ? `SESSDATA=${config.sessdata}` : ''
+    const preferAvc = config.preferAvc !== false
+    const now = Number(ctx.now ?? Date.now())
+    // 登录态与编码偏好都会改变 B 站给的地址，各自缓存。SESSDATA 换了值会经
+    // updateModuleConfig → clearResolveCache 清掉，这里不必把凭据本身放进键里。
+    const key = `${roomId}:${preferAvc ? 'avc' : 'hevc'}:${cookie ? 'login' : 'anon'}`
+
+    const cached = resolveCache.get(key)
+    if (cached && cached.expiresAt > now) return cached.value
+
+    let pending = resolvePending.get(key)
+    if (!pending) {
+      pending = resolveFresh(roomId, { cookie, preferAvc, timeoutMs: ctx.timeoutMs, fetchImpl: ctx.fetchImpl })
+        .then(
+          value => {
+            resolveCache.set(key, { value, expiresAt: now + RESOLVE_TTL_MS })
+            return value
+          },
+          error => {
+            const risk = error instanceof RiskControlError
+            const value = {
+              url: '',
+              desc: risk ? error.message : `B 站直播间 ${roomId} 地址获取失败：${error?.message || error}`,
+            }
+            resolveCache.set(key, { value, expiresAt: now + (risk ? RESOLVE_RISK_TTL_MS : RESOLVE_FAIL_TTL_MS) })
+            return value
+          },
+        )
+        .finally(() => {
+          if (resolvePending.get(key) === pending) resolvePending.delete(key)
+        })
+      resolvePending.set(key, pending)
+    }
+    return await pending
+  } catch (error) {
+    return { url: '', desc: error?.message || 'B 站播放地址获取失败' }
+  }
+}
+
+/** 画质 / 登录态等配置变更后由 extractorManager 与 appUtils.clearUrlCache 触发。 */
+export function clearResolveCache() {
+  resolveCache.clear()
+  resolvePending.clear()
 }
 
 /**

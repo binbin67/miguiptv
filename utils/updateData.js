@@ -121,8 +121,8 @@ async function updateTV(hours, options = {}) {
       // 启动模式：只更新设置了 updateOnStartup: true 的源
       printBlue("启动模式：检查需要更新的外部源...")
       await updateExternalSources({ startupMode: true })
-      // 抓取模块启动时一律抓一轮：直播地址是短效的（B 站约 2 小时），
-      // 缓存里那份多半已经过期，不抓等于开机后一段时间全是死链。
+      // 抓取模块启动时一律抓一轮：直播平台的房间名单会变、部分模块的直链是短效的，
+      // 缓存里那份多半已经过时，不抓等于开机后一段时间全是死链。
       await updateExtractors({ forceAll: true })
     } else {
       // 定时更新模式：更新所有设置了自动刷新的源（包括内置源和外部源）

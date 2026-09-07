@@ -23,7 +23,13 @@ import { join } from 'node:path'
 
 import { listModules, getModule, sourceIdOf, resolverFor, validateModule, MODULE_ID_RE } from '../extractors/registry.js'
 import { clearUrlCache } from '../utils/appUtils.js'
-import { selectFromPlayurl, parseRoomList, normalizeRoom, mapLimit, selectTopRooms, RoomError, BILIBILI_GROUP, DEFAULT_MIN_ONLINE } from '../extractors/bilibili-live/api.js'
+import {
+  selectFromPlayurl, parseRoomList, normalizeRoom, mapLimit, selectTopRooms, RoomError, BILIBILI_GROUP, DEFAULT_MIN_ONLINE,
+  fetchRoom as fetchBiliRoom,
+  resolveRoom as resolveBiliRoom,
+  claimsRef as biliClaimsRef,
+  clearResolveCache as clearBiliResolveCache,
+} from '../extractors/bilibili-live/api.js'
 import { shouldFailRound, parseAreaNames, mergeRoomRefs, groupBilibiliResults } from '../extractors/bilibili-live/index.js'
 import {
   DEFAULT_MIN_HEAT,
@@ -195,26 +201,26 @@ check('id 白名单挡住会破坏 EXTINF 属性的字符', () => {
 // ---- 配置校验 ----
 
 check('int 字段：边界外拒绝并回退，不落坏值', () => {
-  const bad = validateConfig(bili, { cachingMs: 999999 }, { cachingMs: 3000 })
+  const bad = validateConfig(bili, { topPerArea: 999 }, { topPerArea: 8 })
   assert.equal(bad.ok, false)
-  assert.equal(bad.config.cachingMs, 3000, '越界时保持原值')
+  assert.equal(bad.config.topPerArea, 8, '越界时保持原值')
   assert.match(bad.errors[0].message, /不能大于/)
 
-  const good = validateConfig(bili, { cachingMs: '5000' }, {})
+  const good = validateConfig(bili, { topPerArea: '5' }, {})
   assert.equal(good.ok, true)
-  assert.equal(good.config.cachingMs, 5000, '字符串数字要被转成数字')
+  assert.equal(good.config.topPerArea, 5, '字符串数字要被转成数字')
 })
 
 check('职责分离：validateConfig 只产出要落盘的，默认值由 resolveConfig 补', () => {
   // 未提交的字段：已存的保留，没存过的不写（稀疏）
-  assert.equal(validateConfig(bili, {}, { cachingMs: 1234 }).config.cachingMs, 1234)
+  assert.equal(validateConfig(bili, {}, { topPerArea: 12 }).config.topPerArea, 12)
   assert.deepEqual(validateConfig(bili, {}, {}).config, {}, '空提交 + 空存储 = 什么都不落盘')
 
   // 默认值在取值层，不在存储层
   const effective = resolveConfig(bili, {})
-  assert.equal(effective.cachingMs, 3000)
-  assert.equal(effective.preferHls, true)
-  assert.equal(resolveConfig(bili, { cachingMs: 1234 }).cachingMs, 1234, '已存值压过默认')
+  assert.equal(effective.topPerArea, 8)
+  assert.equal(effective.preferAvc, true)
+  assert.equal(resolveConfig(bili, { topPerArea: 12 }).topPerArea, 12, '已存值压过默认')
 })
 
 check('secret 字段：空串 = 保持原值（后台看不见它，不能因保存而抹掉）', () => {
@@ -291,9 +297,9 @@ check('稀疏存储：显式设成 false 的布尔字段能压过 env（原先�
 check('稀疏存储：只落盘用户显式设过的字段', () => {
   const { config } = validateConfig(bili, { rooms: '13' }, {})
   assert.deepEqual(Object.keys(config), ['rooms'], '没提交的字段不该被补进存储')
-  const again = validateConfig(bili, { preferHls: false }, config)
-  assert.deepEqual(Object.keys(again.config).sort(), ['preferHls', 'rooms'], '已存的保留，新提交的加入')
-  assert.equal(again.config.preferHls, false, 'false 也算「配过」')
+  const again = validateConfig(bili, { preferAvc: false }, config)
+  assert.deepEqual(Object.keys(again.config).sort(), ['preferAvc', 'rooms'], '已存的保留，新提交的加入')
+  assert.equal(again.config.preferAvc, false, 'false 也算「配过」')
 })
 
 check('清空 = 回到「没配过」，而不是存一个空值', () => {
@@ -427,6 +433,105 @@ check('选流：有 stream 但没有可用 host/base 时报明确错误', () => 
     { codec_name: 'avc', base_url: '', url_info: [{ host: '', extra: '' }] },
   ] }] }])
   assert.throws(() => selectFromPlayurl(data, {}), /没有可用的 host/)
+})
+
+// ---- 播放时解析（issue #120：签名地址实测 60 分钟过期，不能再写进播放列表）----
+
+/** 三个 B 站接口的假回包；path → 整个 JSON 信封。fetchImpl 记下每次请求的路径与请求头。 */
+const biliApiFixture = (overrides = {}) => {
+  const calls = []
+  const payloads = {
+    '/room/v1/Room/get_info': { code: 0, data: { room_id: 21144080, uid: 7, title: 'KPL 总决赛', live_status: 1 } },
+    '/xlive/web-room/v2/index/getRoomPlayInfo': { code: 0, data: playurl([
+      { protocol_name: 'http_hls', format: [{ codec: [{
+        ...codecOf('avc', '/live-bvc/1/live_21144080.m3u8', 'https://d1--cn-gotcha104.bilivideo.com', '?expires=1788749800&sign=abc'),
+        current_qn: 250,
+      }] }] },
+    ]) },
+    '/live_user/v1/Master/info': { code: 0, data: { info: { uname: '哔哩哔哩赛事', face: 'https://i0.hdslb.com/face.jpg' } } },
+    ...overrides,
+  }
+  const fetchImpl = async (url, init) => {
+    const path = new URL(String(url)).pathname
+    calls.push({ path, headers: init?.headers || {} })
+    const payload = payloads[path]
+    if (!payload) throw new Error(`unexpected ${path}`)
+    return { ok: true, status: 200, json: async () => payload }
+  }
+  return { fetchImpl, calls }
+}
+
+check('B 站：已改为延迟解析模块，ref 单段且只认自己的', () => {
+  assert.equal(bili.capabilities.resolve, true)
+  assert.equal(typeof bili.resolve, 'function')
+  assert.equal(resolverFor('bili-21144080')?.id, 'bilibili-live')
+  assert.equal(resolverFor('bili-21144080/extra'), null, 'ref 必须是单个路径段')
+  assert.equal(biliClaimsRef('huya-660101'), false)
+  assert.equal(biliClaimsRef('bili-'), false)
+  assert.equal(bili.configSchema.some(f => f.key === 'preferHls' || f.key === 'cachingMs'), false, '直链时代的选项已下线')
+  assert.ok(bili.minRefreshMinutes <= 45 && bili.maxRefreshMinutes >= 45, '老用户存的 45 分钟不能越界回落')
+})
+
+await checkAsync('B 站：抓取只落 deferredRef + relayHls，不再把一小时就过期的直链和请求头写进播放列表', async () => {
+  const { fetchImpl, calls } = biliApiFixture()
+  const { channel, roomId } = await fetchBiliRoom('21144080', { cookie: 'SESSDATA=abc', fetchImpl })
+  assert.equal(roomId, '21144080')
+  assert.equal(channel.deferredRef, 'bili-21144080')
+  assert.equal(channel.relayHls, true)
+  assert.equal(channel.url, undefined, '直链不进缓存与播放列表')
+  assert.equal(channel.opts, undefined, 'LunaTV 导入时 EXTINF 后必须紧跟地址')
+  assert.equal(channel.name, '[超清] 哔哩哔哩赛事 · KPL 总决赛', '画质档仍写进频道名（判断 SESSDATA 是否生效的信号）')
+  assert.equal(channel.logo, 'https://i0.hdslb.com/face.jpg')
+  assert.ok(calls.every(c => c.headers.Cookie === 'SESSDATA=abc'), '登录态随每个接口请求发出')
+})
+
+await checkAsync('B 站：播放时才换取签名地址并要求清单中继，60 秒内复用、失败短暂记忆', async () => {
+  clearBiliResolveCache()
+  const { fetchImpl, calls } = biliApiFixture()
+  const config = { sessdata: 'abc', preferAvc: true }
+  const t0 = 1700000000000
+  const first = await resolveBiliRoom('bili-21144080', { now: t0, config, fetchImpl })
+  assert.equal(first.url, 'https://d1--cn-gotcha104.bilivideo.com/live-bvc/1/live_21144080.m3u8?expires=1788749800&sign=abc')
+  assert.equal(first.relayHls, true)
+  assert.equal(first.upstreamHeaders.Referer, 'https://live.bilibili.com/')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].path, '/xlive/web-room/v2/index/getRoomPlayInfo', '播放时只打一次取流接口')
+  assert.equal(calls[0].headers.Cookie, 'SESSDATA=abc')
+
+  const again = await resolveBiliRoom('bili-21144080', { now: t0 + 30 * 1000, config, fetchImpl })
+  assert.equal(again, first, '60 秒内复用同一份')
+  assert.equal(calls.length, 1)
+
+  await resolveBiliRoom('bili-21144080', { now: t0 + 61 * 1000, config, fetchImpl })
+  assert.equal(calls.length, 2, '过了 60 秒重新换取')
+
+  // 登录态 / 编码偏好不同要分开缓存：匿名请求不能拿到登录态换来的地址
+  await resolveBiliRoom('bili-21144080', { now: t0 + 61 * 1000, config: { preferAvc: true }, fetchImpl })
+  assert.equal(calls.length, 3)
+  assert.equal(calls[2].headers.Cookie, undefined)
+
+  const bad = await resolveBiliRoom('bili-x', { now: t0, config, fetchImpl })
+  assert.equal(bad.url, '')
+  assert.match(bad.desc, /格式错误/)
+
+  clearBiliResolveCache()
+  const offline = biliApiFixture({ '/xlive/web-room/v2/index/getRoomPlayInfo': { code: 0, data: playurl([]) } })
+  const missing = await resolveBiliRoom('bili-21144080', { now: t0, config, fetchImpl: offline.fetchImpl })
+  assert.equal(missing.url, '')
+  assert.match(missing.desc, /未开播或地区限制/)
+  await resolveBiliRoom('bili-21144080', { now: t0 + 5 * 1000, config, fetchImpl: offline.fetchImpl })
+  assert.equal(offline.calls.length, 1, '失败 15 秒内不再打接口，挡住播放器的连环重试')
+  await resolveBiliRoom('bili-21144080', { now: t0 + 16 * 1000, config, fetchImpl: offline.fetchImpl })
+  assert.equal(offline.calls.length, 2, '15 秒后重试')
+
+  clearBiliResolveCache()
+  const risk = biliApiFixture({ '/xlive/web-room/v2/index/getRoomPlayInfo': { code: -352, message: '风控校验失败' } })
+  const blocked = await resolveBiliRoom('bili-21144080', { now: t0, config, fetchImpl: risk.fetchImpl })
+  assert.equal(blocked.url, '')
+  assert.match(blocked.desc, /-352/)
+  await resolveBiliRoom('bili-21144080', { now: t0 + 30 * 1000, config, fetchImpl: risk.fetchImpl })
+  assert.equal(risk.calls.length, 1, '风控期间 60 秒内不再撞接口')
+  clearBiliResolveCache()
 })
 
 // ---- 房间清单解析 ----
@@ -1045,7 +1150,7 @@ try {
     const manager = newManager()
     manager.config.modules['bilibili-live'] = {
       enabled: true,
-      config: { rooms: '13', sessdata: '', preferHls: true, preferAvc: true, cachingMs: 3000 },
+      config: { rooms: '13', sessdata: '', preferHls: true, preferAvc: true, cachingMs: 3000, minOnline: 3000 },
     }
     const saved = process.env.mbiliSessdata
     try {
@@ -1053,7 +1158,9 @@ try {
       const cfg = manager.effectiveConfig(getModule('bilibili-live'))
       assert.equal(cfg.sessdata, 'FROM_ENV', '老配置里的空串要被归一掉，让 env 接手')
       assert.equal(cfg.rooms, '13', '有值的字段保持不变')
-      assert.equal(cfg.cachingMs, 3000, 'int 不做归一，保留成「配过」')
+      assert.equal(cfg.minOnline, 3000, 'int 不做归一，保留成「配过」')
+      assert.equal(cfg.cachingMs, undefined, '已下线的直链时代字段（preferHls / cachingMs）不再进生效配置')
+      assert.equal(cfg.preferHls, undefined)
     } finally {
       if (saved === undefined) delete process.env.mbiliSessdata
       else process.env.mbiliSessdata = saved
@@ -1135,20 +1242,22 @@ try {
     assert.deepEqual(manager.criticalShortfall(), [])
   })
 
-  check('刷新间隔默认取模块声明值，且远小于 B 站地址的 2 小时有效期', () => {
+  check('刷新间隔默认取模块声明值；B 站地址改为播放时现换，周期只管房间名单，区间与虎牙对齐', () => {
     const manager = newManager()
     const module = manager.getState().modules.find(m => m.id === 'bilibili-live')
     assert.equal(module.refreshMinutes, 45)
-    assert.equal(module.minRefreshMinutes, 45)
-    assert.equal(module.maxRefreshMinutes, 90)
-    assert.ok(module.refreshMinutes * 60 * 1000 < 2 * 60 * 60 * 1000)
+    assert.equal(module.minRefreshMinutes, 15)
+    assert.equal(module.maxRefreshMinutes, 120)
   })
 
-  check('B 站刷新间隔只允许 45~90 分钟，历史越界值回落默认', () => {
+  check('B 站刷新间隔只允许 15~120 分钟，历史越界值回落默认', () => {
     const manager = newManager()
-    assert.throws(() => manager.updateModuleConfig('bilibili-live', {}, { refreshMinutes: 44 }), /45~90/)
-    assert.throws(() => manager.updateModuleConfig('bilibili-live', {}, { refreshMinutes: 91 }), /45~90/)
-    manager.updateModuleConfig('bilibili-live', {}, { refreshMinutes: 90 })
+    assert.throws(() => manager.updateModuleConfig('bilibili-live', {}, { refreshMinutes: 14 }), /15~120/)
+    assert.throws(() => manager.updateModuleConfig('bilibili-live', {}, { refreshMinutes: 121 }), /15~120/)
+    manager.updateModuleConfig('bilibili-live', {}, { refreshMinutes: 120 })
+    assert.equal(manager.getState().modules.find(m => m.id === 'bilibili-live').refreshMinutes, 120)
+    // 直链时代存过的 90 仍在区间内，升级后不回落
+    manager.config.modules['bilibili-live'].refreshMinutes = 90
     assert.equal(manager.getState().modules.find(m => m.id === 'bilibili-live').refreshMinutes, 90)
     manager.config.modules['bilibili-live'].refreshMinutes = 10
     assert.equal(manager.getState().modules.find(m => m.id === 'bilibili-live').refreshMinutes, 45)

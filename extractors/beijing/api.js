@@ -13,8 +13,18 @@ const DEFAULT_HEADERS = Object.freeze({
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   accept: '*/*',
 })
-const MEDIA_HEADERS = Object.freeze({
-  Referer: 'https://www.btime.com/',
+// 媒体 CDN 的防盗链请求头。电视台专用 CDN（brtv-play.v.btime.com，MC_VCLOUD_LIVE）校验的是
+// Referer 的**完整页面路径**：2026-09-07 用真实登录态实测，同一条签名地址带
+// `https://www.btime.com/btv/btvsy_index` 回 200，带根路径 `https://www.btime.com/`、
+// `/live`、`/btv/` 或任意别的路径一律 403 且空正文；分片则两种都放行。独立验证台当时能播
+// 正是因为它的服务端代理写的是完整页面路径，移植时收成根路径就全军覆没。
+// 公开活动流（hls.playlive.360.v.btime.com）实测不查 Referer / Origin，按来源页给即可。
+const TV_MEDIA_HEADERS = Object.freeze({
+  Referer: BEIJING_PAGE,
+  Origin: 'https://www.btime.com',
+})
+const LIVE_MEDIA_HEADERS = Object.freeze({
+  Referer: BEIJING_LIVE_PAGE,
   Origin: 'https://www.btime.com',
 })
 
@@ -235,7 +245,7 @@ async function publicEventAvailable(event, options = {}) {
   const response = await request(url, {
     timeoutMs: options.timeoutMs,
     fetchImpl: options.mediaFetchImpl || options.fetchImpl,
-    headers: MEDIA_HEADERS,
+    headers: LIVE_MEDIA_HEADERS,
   })
   if (!response.ok) return false
   const text = await response.text()
@@ -300,17 +310,16 @@ export async function resolveChannel(ref, ctx = {}) {
   try {
     const value = String(ref || '')
     const tv = value.match(/^beijing-tv-(sn|wy|kj|ys|cj|ty|sh|xw|se)$/)
-    let url
     if (tv) {
       const cookie = parseCredential(ctx.config?.cookie)
       if (!cookie) return { url: '', desc: '北京电视台需要先在后台配置北京时间登录 Cookie' }
-      url = await requestPlayUrl(tvGids.get(tv[1]), cookie, ctx)
-    } else {
-      const event = value.match(/^beijing-live-(\d{1,4})-([a-z0-9]{1,64})$/)
-      if (!event) return { url: '', desc: '北京时间频道地址格式错误' }
-      url = await requestPlayUrl(event[2], '', { ...ctx, typeId: event[1], referer: BEIJING_LIVE_PAGE })
+      const url = await requestPlayUrl(tvGids.get(tv[1]), cookie, ctx)
+      return { url, upstreamHeaders: TV_MEDIA_HEADERS }
     }
-    return { url, upstreamHeaders: MEDIA_HEADERS }
+    const event = value.match(/^beijing-live-(\d{1,4})-([a-z0-9]{1,64})$/)
+    if (!event) return { url: '', desc: '北京时间频道地址格式错误' }
+    const url = await requestPlayUrl(event[2], '', { ...ctx, typeId: event[1], referer: BEIJING_LIVE_PAGE })
+    return { url, upstreamHeaders: LIVE_MEDIA_HEADERS }
   } catch (error) {
     const message = String(error?.message || error).replace(/(?:Cookie|cookie)\s*[:=]\s*[^\s,;]+/g, 'Cookie=<已隐藏>')
     return { url: '', desc: message }

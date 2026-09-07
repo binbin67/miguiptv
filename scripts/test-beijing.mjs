@@ -110,7 +110,7 @@ test('有效登录加入 9 个电视台，公开直播自动排除失效项目',
   assert.equal(accountCall.headers.Cookie, cookie)
   const mediaCalls = f.calls.filter(call => call.url.hostname.endsWith('.v.btime.com'))
   assert.ok(mediaCalls.length > 0)
-  assert.ok(mediaCalls.every(call => !('Cookie' in call.headers) && call.headers.Origin === 'https://www.btime.com'))
+  assert.ok(mediaCalls.every(call => !('Cookie' in call.headers) && call.headers.Origin === 'https://www.btime.com' && call.headers.Referer === BEIJING_LIVE_PAGE))
 })
 
 test('Cookie 过期时仅隐藏电视台，免登录直播继续输出', async () => {
@@ -127,13 +127,15 @@ test('电视台与公开活动按需取址，登录 Cookie 不传给媒体 CDN',
   const f = fixture()
   const tv = await resolveChannel('beijing-tv-sn', { config: { cookie }, fetchImpl: f.fetchImpl, now: 1777777777000 })
   assert.equal(tv.url, liveUrl(BEIJING_CHANNELS[0].gid))
-  assert.deepEqual(tv.upstreamHeaders, { Referer: 'https://www.btime.com/', Origin: 'https://www.btime.com' })
+  // 电视台 CDN 校验 Referer 的完整页面路径，根路径会 403（2026-09-07 实测），此处必须是频道页地址
+  assert.deepEqual(tv.upstreamHeaders, { Referer: BEIJING_PAGE, Origin: 'https://www.btime.com' })
   const tvApi = f.calls.find(call => call.url.searchParams.get('type_id') === '151')
   assert.equal(tvApi.headers.Cookie, cookie)
 
   clearCache()
   const publicResult = await resolveChannel('beijing-live-6-eventone', { fetchImpl: f.fetchImpl, now: 1777777777000 })
   assert.equal(publicResult.url, liveUrl('eventone'))
+  assert.deepEqual(publicResult.upstreamHeaders, { Referer: BEIJING_LIVE_PAGE, Origin: 'https://www.btime.com' })
   const publicApi = f.calls.filter(call => call.url.searchParams.get('type_id') === '6').at(-1)
   assert.equal(publicApi.headers.Cookie, undefined)
   assert.equal((await resolveChannel('beijing-tv-sn', { config: {} })).url, '')

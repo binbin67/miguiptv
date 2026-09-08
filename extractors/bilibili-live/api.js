@@ -4,7 +4,8 @@
  * 这一层刻意只做「输入 → 频道对象」，不碰磁盘、不读全局配置、不写播放列表，
  * 所以可以整层单测。调度、缓存、健康记账都在 utils/extractorManager.js。
  *
- * 移植自 bili-live-m3u（Python），几处刻意不照抄，理由都写在各自函数上。
+ * 由维护者自己早年的本地 Python 脚本 bili-live-m3u 改写而来，不是移植第三方项目；
+ * 几处刻意没有照搬旧脚本的做法，理由都写在各自函数上。
  */
 import fetch from 'node-fetch'
 import { printYellow } from '../../utils/colorOut.js'

@@ -28,7 +28,7 @@ import { getAliasesAPI, setAliasRuleAPI, removeAliasRuleAPI } from "./utils/alia
 import { getGroupRulesAPI, setGroupRuleAPI, removeGroupRuleAPI, moveGroupRuleAPI } from "./utils/groupRulesAPI.js";
 import { getSystemConfigAPI, saveSystemConfigAPI } from "./utils/systemConfigAPI.js";
 import { exportConfigAPI, importConfigAPI } from "./utils/configBackupAPI.js";
-import { readConfig, saveConfig, parseInterfaceTxt, validateGroupConfig, applyConfig,
+import { readConfig, saveConfig, parseInterfaceTxt, collectGroupConflicts, applyConfig,
          listProfiles, createProfile, renameProfile, deleteProfile } from "./utils/playlistConfig.js";
 import { updateBuiltInSources, updateExternalSources, updateExtractors, externalSourceManager, builtInSourceManager } from "./utils/channelMerger.js";
 import { GITHUB_RAW_MIRRORS, isBuiltInSubscriptionSource } from "./utils/externalSources.js";
@@ -866,10 +866,14 @@ async function handleRequest(req, res) {
 
         if (groupConfigChanged) {
           const groups = parseInterfaceTxt()
-          const validation = validateGroupConfig(groups, config)
-          if (!validation.valid) {
+          // 只拦「本次改动新引入」的重名：早先合法建下的自定义分组，可能因为源分组后来才出现 / 被恢复
+          // 而事后撞名。这种旧冲突若也拦，新增 / 改名 / 删除分组会被整个锁死（用户体感「分组只能建一个」），
+          // 报错还指着那个不相干的旧分组名，且没有任何自助解开的入口。旧冲突放行，由 applyConfig 合并同名分组。
+          const existingConflicts = new Set(collectGroupConflicts(groups, currentConfig).map(item => item.name))
+          const introduced = collectGroupConflicts(groups, config).filter(item => !existingConflicts.has(item.name))
+          if (introduced.length > 0) {
             res.writeHead(400, { 'Content-Type': 'application/json;charset=UTF-8' });
-            res.end(JSON.stringify({ success: false, message: validation.message }));
+            res.end(JSON.stringify({ success: false, message: introduced[0].message }));
             return
           }
         }

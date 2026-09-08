@@ -1501,6 +1501,19 @@
             color: #fff;
         }
 
+        /* 自定义分组与同名订阅分组合并显示时的提示（建组时源里没有该分组，之后源恢复就会撞在一起） */
+        .group-merge-notice {
+            margin: 0 0 12px;
+            padding: 9px 14px;
+            background: #fffbe6;
+            border: 1px solid #ffe58f;
+            border-left: 4px solid #faad14;
+            border-radius: 6px;
+            color: #874d00;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
         /* 核心内容开关：默认开启，单独成组并强调谨慎关闭 */
         .content-switches {
             border: 1px solid #ffccc7;
@@ -3029,6 +3042,7 @@
         .moved-notice a { color: var(--ui-accent); }
         .moved-notice-close { color: var(--ui-accent); border-color: var(--ui-accent-line); border-radius: 8px; }
         .moved-notice-close:hover { border-color: var(--ui-accent); background: var(--ui-accent); }
+        .group-merge-notice { border-radius: 12px; border-left-width: 1px; }
         .status {
             padding: 16px 22px;
             border-radius: 13px;
@@ -7967,13 +7981,16 @@ if(success){
             if (myPlaylistData.length === 0) {
                 activeList.innerHTML = '<div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">暂无频道</div>';
             } else {
-                activeList.innerHTML = myPlaylistData.map((group, originalIndex) => `
+                activeList.innerHTML = myPlaylistData.map((group, originalIndex) => {
+                    const mergedCount = mergedSourceGroupCount(group);
+                    return `
                     <div class="my-playlist-group-item ${!isViewingDeleted && selectedGroupIndex === originalIndex ? 'active' : ''}" 
                          onclick="selectGroup(${originalIndex}, false)">
-                        <span>${group.name}</span>
+                        <span>${group.name}${mergedCount ? ` <span style="color:#faad14;" title="和订阅源里的同名分组合并显示了，点开看详情">⚠</span>` : ''}</span>
                         <span style="color: #999; font-size: 12px;">${group.channels.length}</span>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             }
 
             // 渲染被删除分组列表
@@ -8223,7 +8240,15 @@ if(success){
                     `;
                 }
 
+                const mergedCount = mergedSourceGroupCount(group);
                 container.innerHTML = `
+                    ${mergedCount ? `
+                        <div class="group-merge-notice">
+                            ⚠️ 这个自定义分组和订阅源里的同名分组「${escapeHtml(group.name)}」合并显示了，其中 ${mergedCount} 个频道来自订阅源。
+                            建这个分组时源里还没有它（源没抓到 / 被整组隐藏过），后来源里又有了。
+                            想把两边分开，把本分组「重命名」成另一个名字即可；不需要的话「删除分组」，源里的频道会留下。
+                        </div>
+                    ` : ''}
                     ${group.channels.length === 0 ? `
                         <div style="text-align: center; padding: 40px; color: #999;">当前分组暂无频道</div>
                     ` : `
@@ -8357,6 +8382,23 @@ if(success){
 
         function isCustomGroupName(groupName) {
             return getCustomGroupNames().includes(groupName);
+        }
+
+        // 自定义分组与「同名的订阅源分组」合并显示时，返回其中来自订阅源的频道数（否则 0）。
+        // 成因：建这个自定义分组时源里还没有同名分组（源抓取失败 / 该组被整组隐藏），之后源恢复就撞到一起。
+        // 服务端只拦「本次改动新引入」的重名，这种事后撞名会放行并由 applyConfig 合并成一个分组——
+        // 界面上看不出重名，用户会以为自己建的组丢了，所以这里显式提示一句。
+        function mergedSourceGroupCount(group) {
+            if (!group || !isCustomGroupName(group.name)) return 0;
+            const renameMap = myPlaylistConfig.groupRenameMap || {};
+            const channelGroupMap = myPlaylistConfig.channelGroupMap || {};
+            return group.channels.filter(channel => {
+                const origin = channel?.originalGroup;
+                if (!origin) return false;
+                // 手动移进来的频道不算：那是用户自己拖的，不是同名分组撞出来的
+                if (channelGroupMap[`${origin}::${channel.id}`]) return false;
+                return (renameMap[origin] || origin) === group.name;
+            }).length;
         }
 
         // 根据当前（可能已重命名）的分组名，查找原始分组名

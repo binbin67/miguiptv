@@ -306,18 +306,20 @@ function getCustomGroupNames(config) {
 }
 
 /**
- * 校验分组配置是否会与现有分组重名
+ * 列出分组配置里**所有**的重名冲突（[{ name, message }]，无冲突则为空数组）。
+ *
+ * 与 validateGroupConfig 的区别：后者只回报第一条。调用方拿到全量冲突后，可以和「盘上现有配置」
+ * 的冲突集合做差集，从而只拦截**本次改动新引入**的重名——早先合法建下、后来才被源变化撞上的旧冲突
+ * 不该把新增 / 改名 / 删除分组整个锁死（那会让用户以为「分组只能建一个」，报错还指着另一个分组名）。
  */
-export function validateGroupConfig(groups, config) {
+export function collectGroupConflicts(groups, config) {
   config = protectAnnouncementConfig(config)
   const renameMap = config?.groupRenameMap || {}
   const occupiedNames = new Map([['未分组', '__reserved_ungrouped__']])
+  const conflicts = []
 
   if (renameMap['未分组'] && renameMap['未分组'] !== '未分组') {
-    return {
-      valid: false,
-      message: '未分组不支持重命名'
-    }
+    return [{ name: '未分组', message: '未分组不支持重命名' }]
   }
 
   for (const group of groups) {
@@ -342,18 +344,14 @@ export function validateGroupConfig(groups, config) {
 
     if (existingGroup && existingGroup !== group.name) {
       if (!(targetName === '未分组' && group.name === '未分组')) {
-        return {
-          valid: false,
-          message: `分组 "${targetName}" 已存在`
-        }
+        conflicts.push({ name: targetName, message: `分组 "${targetName}" 已存在` })
+        continue
       }
     }
 
     if (group.name !== '未分组' && targetName === '未分组') {
-      return {
-        valid: false,
-        message: `分组 "${targetName}" 已存在`
-      }
+      conflicts.push({ name: targetName, message: `分组 "${targetName}" 已存在` })
+      continue
     }
 
     occupiedNames.set(targetName, group.name)
@@ -361,16 +359,22 @@ export function validateGroupConfig(groups, config) {
 
   for (const customGroupName of getCustomGroupNames(config)) {
     if (occupiedNames.has(customGroupName)) {
-      return {
-        valid: false,
-        message: `分组 "${customGroupName}" 已存在`
-      }
+      conflicts.push({ name: customGroupName, message: `分组 "${customGroupName}" 已存在` })
+      continue
     }
 
     occupiedNames.set(customGroupName, `custom:${customGroupName}`)
   }
 
-  return { valid: true }
+  return conflicts
+}
+
+/**
+ * 校验分组配置是否会与现有分组重名（只回报第一条冲突）
+ */
+export function validateGroupConfig(groups, config) {
+  const [conflict] = collectGroupConflicts(groups, config)
+  return conflict ? { valid: false, message: conflict.message } : { valid: true }
 }
 
 /**
@@ -691,6 +695,7 @@ export default {
   saveConfig,
   parseInterfaceTxt,
   validateGroupConfig,
+  collectGroupConflicts,
   applyConfig,
   generateM3u8,
   generateTxt,

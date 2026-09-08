@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * 分组判重回归测试（issue #35）
+ * 分组判重回归测试（issue #35 / 邮件反馈「自定义分组只能加一个」）
  *
  * 验证：被「移空 / 隐藏 / 删除」而在「我的频道」列表里看不到的分组，不再占用其分组名，
  * 因此可以把别的分组改名成它、或新建同名分组；但同名分组若「当前可见」仍会被拦截。
+ * G/H 另外守住：早先合法建下、后来才被源变化撞上的旧冲突，不能把后续分组操作整个锁死。
  *
  * 运行： node scripts/test-group-dedup.mjs   （或 npm test）
  */
 import assert from 'node:assert/strict'
-import { validateGroupConfig, applyConfig } from '../utils/playlistConfig.js'
+import { validateGroupConfig, collectGroupConflicts, applyConfig } from '../utils/playlistConfig.js'
 
 // 静音 applyConfig 里的彩色业务日志（printBlue/printGreen 经 console.log，消息在末位参数），让测试输出清爽
 for (const k of ['log', 'info', 'warn']) {
@@ -108,4 +109,40 @@ check('F 未分组不允许重命名 → 拦截', () => {
   assert.equal(validateGroupConfig(groups, cfg).valid, false)
 })
 
-console.log(`\n全部通过：${passed}/6 ✅`)
+// G. 建组时源里没有「浙江」组（源抓取失败 / 该组被隐藏），之后源恢复 → 旧冲突不该锁死新增分组
+//    这正是邮件反馈「分组只能添加一个，再添加就提示前面那个添加的名字」的成因
+check('G 旧冲突不锁死后续新增分组 → 放行，且不误报旧组名', () => {
+  const groupsBefore = sourceGroups()                       // 源里此时没有「浙江」
+  const before = baseConfig()
+  before.customGroups = [{ name: '浙江' }]
+  assert.deepEqual(validateGroupConfig(groupsBefore, before), { valid: true }, '建「浙江」时应放行')
+
+  // 源恢复后 interface.txt 里又有「浙江」组了，用户这次要加的是「体育台」
+  const groupsAfter = [...sourceGroups(), { name: '浙江', channels: [{ id: 'zj1', name: '浙江卫视' }] }]
+  const after = baseConfig()
+  after.customGroups = [{ name: '浙江' }, { name: '体育台' }]
+
+  const existing = new Set(collectGroupConflicts(groupsAfter, before).map(item => item.name))
+  const introduced = collectGroupConflicts(groupsAfter, after).filter(item => !existing.has(item.name))
+  assert.deepEqual(existing, new Set(['浙江']), '旧配置本身已经撞名')
+  assert.deepEqual(introduced, [], '本次只加了「体育台」，不该被旧冲突拦下')
+
+  // 界面上两者合并为一个「浙江」，用户看不到重名，所以更不能拿它当拦截理由
+  assert.equal(applyConfig(groupsAfter, after).filter(g => g.name === '浙江').length, 1)
+})
+
+// H. 同一状态下若真去新建一个当前可见的同名分组，仍要拦，且报错指向本次这个名字
+check('H 旧冲突存在时，新引入的重名照拦且报错指对组', () => {
+  const groups = [...sourceGroups(), { name: '浙江', channels: [{ id: 'zj1', name: '浙江卫视' }] }]
+  const before = baseConfig()
+  before.customGroups = [{ name: '浙江' }]
+  const after = baseConfig()
+  after.customGroups = [{ name: '浙江' }, { name: '央视' }]   // 央视当前可见 → 真重名
+
+  const existing = new Set(collectGroupConflicts(groups, before).map(item => item.name))
+  const introduced = collectGroupConflicts(groups, after).filter(item => !existing.has(item.name))
+  assert.equal(introduced.length, 1)
+  assert.match(introduced[0].message, /央视.*已存在/)
+})
+
+console.log(`\n全部通过：${passed}/8 ✅`)
